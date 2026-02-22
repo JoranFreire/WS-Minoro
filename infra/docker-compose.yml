@@ -1,0 +1,257 @@
+version: "3.9"
+
+networks:
+  wsminoro:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  cassandra_data:
+  kafka_data:
+  prometheus_data:
+  grafana_data:
+
+services:
+  # ─── Databases ───────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: wsminoro-postgres
+    environment:
+      POSTGRES_DB: wsminoro
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - wsminoro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: wsminoro-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - wsminoro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  cassandra:
+    image: cassandra:4.1
+    container_name: wsminoro-cassandra
+    environment:
+      CASSANDRA_CLUSTER_NAME: wsminoro
+      CASSANDRA_DC: dc1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    ports:
+      - "9042:9042"
+    networks:
+      - wsminoro
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ─── Kafka ───────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: wsminoro-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - wsminoro
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: wsminoro-kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    ports:
+      - "29092:29092"
+    networks:
+      - wsminoro
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      bash -c "
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092
+          --topic click.raw --partitions 6 --replication-factor 1 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092
+          --topic link.health.changed --partitions 3 --replication-factor 1 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092
+          --topic link.auto.disabled --partitions 3 --replication-factor 1 &&
+        echo 'Kafka topics created!'
+      "
+    networks:
+      - wsminoro
+
+  # ─── Migrations ──────────────────────────────────────────────
+  migrate:
+    image: migrate/migrate:v4.17.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/wsminoro?sslmode=disable",
+        "up"
+      ]
+    networks:
+      - wsminoro
+
+  # ─── Application Services ────────────────────────────────────
+  link-router:
+    build:
+      context: ../services/link-router
+      dockerfile: Dockerfile
+    container_name: wsminoro-router
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/wsminoro?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: click.raw
+      RATE_LIMIT_MAX_REQUESTS: 100
+      RATE_LIMIT_WINDOW_SECS: 60
+      INVITE_MAX_RISK_SCORE: 0.7
+      INVITE_HEALTH_INTERVAL_SEC: 30
+      KAFKA_HEALTH_TOPIC: link.health.changed
+      KAFKA_AUTO_DISABLED_TOPIC: link.auto.disabled
+    ports:
+      - "8080:8080"
+    networks:
+      - wsminoro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  link-admin:
+    build:
+      context: ../services/link-admin
+      dockerfile: Dockerfile
+    container_name: wsminoro-admin
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: 8081
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/wsminoro?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-32chars}
+    ports:
+      - "8081:8081"
+    networks:
+      - wsminoro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  analytics-worker:
+    build:
+      context: ../services/analytics-worker
+      dockerfile: Dockerfile
+    container_name: wsminoro-analytics
+    depends_on:
+      kafka:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/wsminoro?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: click.raw
+      KAFKA_GROUP_ID: analytics-worker
+      CASSANDRA_HOSTS: cassandra
+      CASSANDRA_KEYSPACE: link_analytics
+    networks:
+      - wsminoro
+    restart: unless-stopped
+
+  # ─── Observability ───────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: wsminoro-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    ports:
+      - "9090:9090"
+    networks:
+      - wsminoro
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: wsminoro-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3001:3000"
+    networks:
+      - wsminoro
+    depends_on:
+      - prometheus

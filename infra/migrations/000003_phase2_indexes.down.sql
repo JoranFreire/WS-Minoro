@@ -1,0 +1,3 @@
+DROP INDEX CONCURRENTLY IF EXISTS idx_link_destinations_expired_cooldown;
+DROP INDEX CONCURRENTLY IF EXISTS idx_link_destinations_active_link;
+DROP INDEX CONCURRENTLY IF EXISTS idx_link_destinations_risk_score;

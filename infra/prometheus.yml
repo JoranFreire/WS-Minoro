@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "link-router"
+    static_configs:
+      - targets: ["link-router:8080"]
+    metrics_path: /metrics
+
+  - job_name: "link-admin"
+    static_configs:
+      - targets: ["link-admin:8081"]
+    metrics_path: /metrics
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

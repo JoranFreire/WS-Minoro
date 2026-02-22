@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: link-admin
+  labels:
+    app: link-admin
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: link-admin
+  template:
+    metadata:
+      labels:
+        app: link-admin
+    spec:
+      containers:
+        - name: link-admin
+          image: wsminoro/link-admin:latest
+          ports:
+            - containerPort: 8081
+          env:
+            - name: PORT
+              value: "8081"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wsminoro-secrets
+                  key: database-url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: wsminoro-secrets
+                  key: jwt-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: link-admin
+spec:
+  selector:
+    app: link-admin
+  ports:
+    - port: 80
+      targetPort: 8081
+  type: ClusterIP
