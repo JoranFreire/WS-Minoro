@@ -41,6 +41,7 @@ func main() {
 		pgStore,
 		healthPublisher,
 		cfg.Invite.MaxRiskScore,
+		cfg.DefaultDomain,
 	)
 
 	// Phase 2: background health monitor reactivates expired cooldown destinations.
@@ -69,14 +70,12 @@ func main() {
 	app.Get("/metrics", handler.MetricsHandler())
 	app.Get("/:shortCode", redirectHandler.Handle)
 
-	// Start HTTP server.
 	go func() {
 		if err := app.Listen(":" + cfg.Port); err != nil {
 			log.Fatalf("server error: %v", err)
 		}
 	}()
 
-	// Start health monitor in a cancellable context.
 	monitorCtx, monitorCancel := context.WithCancel(context.Background())
 	go monitor.Start(monitorCtx)
 

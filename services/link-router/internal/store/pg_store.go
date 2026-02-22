@@ -19,14 +19,16 @@ type RouteData struct {
 	Destinations    []Destination `json:"destinations"`
 }
 
-// Destination includes Phase 2 fields for intelligent invite routing.
+// Destination includes Phase 2 and Phase 6 fields.
 type Destination struct {
-	ID            string     `json:"id"`
-	URL           string     `json:"url"`
-	Weight        int        `json:"weight"`
-	MaxClicks     *int       `json:"max_clicks"`
-	CooldownUntil *time.Time `json:"cooldown_until"`
-	RiskScore     float64    `json:"risk_score"`
+	ID              string     `json:"id"`
+	URL             string     `json:"url"`
+	Weight          int        `json:"weight"`
+	MaxClicks       *int       `json:"max_clicks"`
+	CooldownUntil   *time.Time `json:"cooldown_until"`
+	RiskScore       float64    `json:"risk_score"`
+	AllowedCountries []string  `json:"allowed_countries"` // Phase 6: geo routing
+	ExperimentID    string     `json:"experiment_id"`     // Phase 6: A/B testing
 }
 
 // ClickResult is returned after atomically incrementing a destination's click count.
@@ -55,23 +57,51 @@ func NewPGStore(databaseURL string) *PGStore {
 	return &PGStore{pool: pool}
 }
 
-// GetRouteByShortCode fetches active destinations including Phase 2 fields.
+// GetRouteByShortCode fetches active destinations including Phase 2 and Phase 6 fields.
 func (s *PGStore) GetRouteByShortCode(ctx context.Context, shortCode string) (*RouteData, error) {
-	row := s.pool.QueryRow(ctx, `
+	return s.queryRoute(ctx, `
 		SELECT l.id, l.tenant_id, l.short_code, l.routing_strategy, COALESCE(l.fallback_url, ''),
 		       json_agg(json_build_object(
-		           'id',             ld.id,
-		           'url',            ld.url,
-		           'weight',         ld.weight,
-		           'max_clicks',     ld.max_clicks,
-		           'cooldown_until', ld.cooldown_until,
-		           'risk_score',     ld.risk_score
+		           'id',               ld.id,
+		           'url',              ld.url,
+		           'weight',           ld.weight,
+		           'max_clicks',       ld.max_clicks,
+		           'cooldown_until',   ld.cooldown_until,
+		           'risk_score',       ld.risk_score,
+		           'allowed_countries',COALESCE(ld.allowed_countries, '{}'),
+		           'experiment_id',    COALESCE(ld.experiment_id, '')
 		       ))
 		FROM links l
 		JOIN link_destinations ld ON ld.link_id = l.id AND ld.is_active = true
 		WHERE l.short_code = $1 AND l.is_active = true
 		GROUP BY l.id, l.tenant_id, l.short_code, l.routing_strategy, l.fallback_url
 	`, shortCode)
+}
+
+// GetRouteByShortCodeAndTenant fetches a route scoped to a specific tenant.
+// Used for white-label custom domain routing.
+func (s *PGStore) GetRouteByShortCodeAndTenant(ctx context.Context, shortCode, tenantID string) (*RouteData, error) {
+	return s.queryRoute(ctx, `
+		SELECT l.id, l.tenant_id, l.short_code, l.routing_strategy, COALESCE(l.fallback_url, ''),
+		       json_agg(json_build_object(
+		           'id',               ld.id,
+		           'url',              ld.url,
+		           'weight',           ld.weight,
+		           'max_clicks',       ld.max_clicks,
+		           'cooldown_until',   ld.cooldown_until,
+		           'risk_score',       ld.risk_score,
+		           'allowed_countries',COALESCE(ld.allowed_countries, '{}'),
+		           'experiment_id',    COALESCE(ld.experiment_id, '')
+		       ))
+		FROM links l
+		JOIN link_destinations ld ON ld.link_id = l.id AND ld.is_active = true
+		WHERE l.short_code = $1 AND l.tenant_id = $2 AND l.is_active = true
+		GROUP BY l.id, l.tenant_id, l.short_code, l.routing_strategy, l.fallback_url
+	`, shortCode, tenantID)
+}
+
+func (s *PGStore) queryRoute(ctx context.Context, sql string, args ...any) (*RouteData, error) {
+	row := s.pool.QueryRow(ctx, sql, args...)
 
 	var route RouteData
 	var destsJSON []byte
@@ -86,8 +116,17 @@ func (s *PGStore) GetRouteByShortCode(ctx context.Context, shortCode string) (*R
 	if err := json.Unmarshal(destsJSON, &route.Destinations); err != nil {
 		return nil, err
 	}
-
 	return &route, nil
+}
+
+// GetTenantIDByCustomDomain returns the tenant ID for a given custom domain.
+// Used by the white-label resolver.
+func (s *PGStore) GetTenantIDByCustomDomain(ctx context.Context, domain string) (string, error) {
+	var tenantID string
+	err := s.pool.QueryRow(ctx, `
+		SELECT id FROM tenants WHERE custom_domain = $1 AND is_active = true
+	`, domain).Scan(&tenantID)
+	return tenantID, err
 }
 
 // IncrDestinationClicks atomically increments current_clicks and returns the result.

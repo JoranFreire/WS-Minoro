@@ -18,6 +18,8 @@ type ClickEvent struct {
 	Timestamp      time.Time `json:"timestamp"`
 	TenantID       string    `json:"tenant_id"`
 	LinkID         string    `json:"link_id"`
+	Country        string    `json:"country"`        // Phase 6: geo
+	ExperimentID   string    `json:"experiment_id"`  // Phase 6: A/B
 }
 
 type KafkaPublisher struct {

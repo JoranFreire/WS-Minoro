@@ -31,6 +31,7 @@ func (p *ClickProcessor) Process(ctx context.Context, event ClickEvent) error {
 		DeviceType:     deviceInfo.DeviceType,
 		Browser:        deviceInfo.Browser,
 		OS:             deviceInfo.OS,
+		Country:        event.Country,
 		Referer:        event.Referer,
 		Timestamp:      event.Timestamp,
 	}
@@ -41,6 +42,19 @@ func (p *ClickProcessor) Process(ctx context.Context, event ClickEvent) error {
 
 	if err := p.redis.IncrClick(ctx, event.LinkID, event.TenantID, event.Timestamp); err != nil {
 		log.Printf("redis aggregation error: %v", err)
+	}
+
+	// Phase 3/4: persist aggregates to PostgreSQL for analytics API.
+	if err := p.pg.IncrClickAggregate(ctx, event.LinkID, event.TenantID, event.Timestamp); err != nil {
+		log.Printf("pg aggregate error: %v", err)
+	}
+
+	if err := p.pg.IncrClickByCountry(ctx, event.LinkID, event.Country, event.Timestamp); err != nil {
+		log.Printf("pg country error: %v", err)
+	}
+
+	if err := p.pg.IncrClickByDevice(ctx, event.LinkID, deviceInfo.DeviceType, event.Timestamp); err != nil {
+		log.Printf("pg device error: %v", err)
 	}
 
 	if err := p.pg.IncrQuotaUsage(ctx, event.TenantID, event.Timestamp); err != nil {

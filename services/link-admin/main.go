@@ -27,6 +27,7 @@ func main() {
 	tenantHandler := handler.NewTenantHandler(tenantSvc)
 	authHandler := handler.NewAuthHandler(authSvc)
 	apikeyHandler := handler.NewAPIKeyHandler(tenantSvc)
+	analyticsHandler := handler.NewAnalyticsHandler(repo)
 
 	authMw := middleware.NewAuthMiddleware(authSvc)
 
@@ -65,6 +66,11 @@ func main() {
 	apikeys := api.Group("/api-keys")
 	apikeys.Post("/", apikeyHandler.Create)
 	apikeys.Delete("/:id", apikeyHandler.Delete)
+
+	analytics := api.Group("/analytics/links")
+	analytics.Get("/:id", analyticsHandler.GetTimeSeries)
+	analytics.Get("/:id/countries", analyticsHandler.GetCountries)
+	analytics.Get("/:id/devices", analyticsHandler.GetDevices)
 
 	if err := app.Listen(":" + cfg.Port); err != nil {
 		log.Fatalf("server error: %v", err)

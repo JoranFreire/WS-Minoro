@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-worker
+  labels:
+    app: analytics-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: analytics-worker
+  template:
+    metadata:
+      labels:
+        app: analytics-worker
+    spec:
+      containers:
+        - name: analytics-worker
+          image: wsminoro/analytics-worker:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: wsminoro-config
+          env:
+            - name: KAFKA_GROUP_ID
+              value: "analytics-worker"
+            - name: KAFKA_TOPIC
+              value: "click.raw"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            exec:
+              command: ["true"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+      restartPolicy: Always
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: analytics-worker-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: analytics-worker

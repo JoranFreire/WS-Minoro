@@ -160,6 +160,7 @@ services:
       KAFKA_TOPIC: click.raw
       RATE_LIMIT_MAX_REQUESTS: 100
       RATE_LIMIT_WINDOW_SECS: 60
+      DEFAULT_DOMAIN: minoro.witsense.com.br
       INVITE_MAX_RISK_SCORE: 0.7
       INVITE_HEALTH_INTERVAL_SEC: 30
       KAFKA_HEALTH_TOPIC: link.health.changed
