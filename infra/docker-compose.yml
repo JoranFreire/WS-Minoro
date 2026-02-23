@@ -78,12 +78,19 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     networks:
       - wsminoro
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc -w 2 localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: wsminoro-kafka
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
