@@ -36,9 +36,9 @@ tidy:
 	cd services/link-admin && go mod tidy
 	cd services/analytics-worker && go mod tidy
 
-# Run dashboard in dev mode
-dashboard:
-	cd dashboard && npm run dev
+# Run frontend in dev mode
+frontend:
+	cd frontend && npm run dev
 
 # Initialize Cassandra schema
 cassandra-init:
