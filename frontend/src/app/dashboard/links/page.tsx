@@ -1,16 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { useLinks } from "@/hooks/useLinks";
+import { useLinks, useLink } from "@/hooks/useLinks";
 import { LinkCard } from "@/components/links/LinkCard";
 import { LinkForm } from "@/components/links/LinkForm";
+import { DestinationList } from "@/components/links/DestinationList";
 import { Link } from "@/lib/api";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 export default function LinksPage() {
   const { data: links, isLoading, error } = useLinks();
   const [showForm, setShowForm] = useState(false);
   const [editingLink, setEditingLink] = useState<Link | undefined>();
+  const [destinationsLink, setDestinationsLink] = useState<Link | undefined>();
+
+  const { data: linkDetail } = useLink(destinationsLink?.id ?? "");
 
   const handleEdit = (link: Link) => {
     setEditingLink(link);
@@ -51,6 +55,28 @@ export default function LinksPage() {
         </div>
       )}
 
+      {destinationsLink && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {destinationsLink.title || destinationsLink.short_code}
+              </h2>
+              <button
+                onClick={() => setDestinationsLink(undefined)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <DestinationList
+              linkId={destinationsLink.id}
+              destinations={linkDetail?.destinations ?? []}
+            />
+          </div>
+        </div>
+      )}
+
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
@@ -71,7 +97,12 @@ export default function LinksPage() {
       {!isLoading && links && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {links.map((link) => (
-            <LinkCard key={link.id} link={link} onEdit={handleEdit} />
+            <LinkCard
+              key={link.id}
+              link={link}
+              onEdit={handleEdit}
+              onManageDestinations={setDestinationsLink}
+            />
           ))}
           {links.length === 0 && (
             <div className="col-span-3 text-center py-16 text-gray-400">

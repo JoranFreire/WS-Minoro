@@ -2,11 +2,12 @@
 
 import { Link } from "@/lib/api";
 import { useDeleteLink } from "@/hooks/useLinks";
-import { ExternalLink, Trash2, Pencil, Copy } from "lucide-react";
+import { ExternalLink, Trash2, Pencil, Copy, ListChecks } from "lucide-react";
 
 interface LinkCardProps {
   link: Link;
   onEdit: (link: Link) => void;
+  onManageDestinations: (link: Link) => void;
 }
 
 const strategyLabel: Record<string, string> = {
@@ -21,7 +22,7 @@ const strategyColor: Record<string, string> = {
   weighted: "bg-purple-50 text-purple-700",
 };
 
-export function LinkCard({ link, onEdit }: LinkCardProps) {
+export function LinkCard({ link, onEdit, onManageDestinations }: LinkCardProps) {
   const deleteLink = useDeleteLink();
   const routerBase = process.env.NEXT_PUBLIC_ROUTER_URL || "http://localhost:8080";
   const shortUrl = `${routerBase}/${link.short_code}`;
@@ -70,8 +71,15 @@ export function LinkCard({ link, onEdit }: LinkCardProps) {
           className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 transition-colors"
         >
           <ExternalLink className="w-3.5 h-3.5" />
-          Test link
+          Test
         </a>
+        <button
+          onClick={() => onManageDestinations(link)}
+          className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+        >
+          <ListChecks className="w-3.5 h-3.5" />
+          Destinations
+        </button>
         <div className="flex-1" />
         <button
           onClick={() => onEdit(link)}
