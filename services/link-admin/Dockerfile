@@ -6,7 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o link-admin ./main.go
 
 FROM alpine:3.19
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata wget
 WORKDIR /app
 COPY --from=builder /app/link-admin .
 EXPOSE 8081

@@ -171,7 +171,7 @@ services:
       - wsminoro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -196,7 +196,7 @@ services:
       - wsminoro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 8081 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
