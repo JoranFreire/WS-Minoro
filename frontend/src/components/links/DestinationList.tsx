@@ -66,8 +66,10 @@ export function DestinationList({ linkId, destinations, strategy }: DestinationL
       linkId,
       destId: dest.id,
       data: {
+        url: dest.url,
+        is_active: dest.is_active,
         weight: s.weight,
-        max_clicks: s.max_clicks ? parseInt(s.max_clicks) : undefined,
+        max_clicks: s.max_clicks ? parseInt(s.max_clicks) : null,
       },
     });
     cancelEdit(dest.id);
