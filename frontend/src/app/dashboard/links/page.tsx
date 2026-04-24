@@ -72,6 +72,7 @@ export default function LinksPage() {
             <DestinationList
               linkId={destinationsLink.id}
               destinations={linkDetail?.destinations ?? []}
+              strategy={destinationsLink.routing_strategy}
             />
           </div>
         </div>

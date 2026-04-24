@@ -50,6 +50,15 @@ export function useAddDestination() {
   });
 }
 
+export function useUpdateDestination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ linkId, destId, data }: { linkId: string; destId: string; data: Partial<api.Destination> }) =>
+      api.updateDestination(linkId, destId, data),
+    onSuccess: (_d, { linkId }) => qc.invalidateQueries({ queryKey: ["links", linkId] }),
+  });
+}
+
 export function useDeleteDestination() {
   const qc = useQueryClient();
   return useMutation({

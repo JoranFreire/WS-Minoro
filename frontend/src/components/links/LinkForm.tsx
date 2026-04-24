@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Link } from "@/lib/api";
 import { useCreateLink, useUpdateLink, useAddDestination } from "@/hooks/useLinks";
-import { Plus, Trash2, Copy } from "lucide-react";
+import { Plus, Trash2, Copy, ChevronDown } from "lucide-react";
 
 interface DestinationDraft {
   url: string;
@@ -81,6 +81,9 @@ export function LinkForm({ link, onClose }: LinkFormProps) {
   const isPending =
     createLink.isPending || updateLink.isPending || addDestination.isPending;
 
+  const error =
+    (createLink.error || updateLink.error || addDestination.error) as { response?: { data?: { message?: string } } } | null;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
 
@@ -114,15 +117,18 @@ export function LinkForm({ link, onClose }: LinkFormProps) {
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Estratégia de roteamento
         </label>
-        <select
-          value={strategy}
-          onChange={(e) => setStrategy(e.target.value as "single" | "round_robin" | "weighted")}
-          className={INPUT}
-        >
-          <option value="round_robin">Round Robin — distribuir igualmente</option>
-          <option value="weighted">Weighted — distribuir por peso</option>
-          <option value="single">Single — sempre o primeiro ativo</option>
-        </select>
+        <div className="relative">
+          <select
+            value={strategy}
+            onChange={(e) => setStrategy(e.target.value as "single" | "round_robin" | "weighted")}
+            className={`${INPUT} appearance-none pr-10 cursor-pointer`}
+          >
+            <option value="round_robin">Round Robin — distribuir igualmente</option>
+            <option value="weighted">Weighted — distribuir por peso</option>
+            <option value="single">Single — sempre o primeiro ativo</option>
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        </div>
       </div>
 
       {!isEditing && (
@@ -224,6 +230,12 @@ export function LinkForm({ link, onClose }: LinkFormProps) {
               }`}
             />
           </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+          {error?.response?.data?.message ?? "Erro ao salvar. Verifique os dados e tente novamente."}
         </div>
       )}
 
