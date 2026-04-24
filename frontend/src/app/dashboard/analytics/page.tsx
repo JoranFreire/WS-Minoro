@@ -8,8 +8,16 @@ import {
   useClicksByCountry,
   useClicksByDevice,
 } from "@/hooks/useAnalytics";
-import { ClickChart } from "@/components/analytics/ClickChart";
-import { GeoBreakdown } from "@/components/analytics/GeoBreakdown";
+import dynamic from "next/dynamic";
+
+const ClickChart = dynamic(
+  () => import("@/components/analytics/ClickChart").then((m) => m.ClickChart),
+  { ssr: false, loading: () => <div className="h-[220px] bg-gray-50 animate-pulse rounded-lg" /> }
+);
+const GeoBreakdown = dynamic(
+  () => import("@/components/analytics/GeoBreakdown").then((m) => m.GeoBreakdown),
+  { ssr: false }
+);
 
 function toDateStr(d: Date) {
   return d.toISOString().split("T")[0];
