@@ -60,12 +60,12 @@ func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, erro
 // ─── Tenant ──────────────────────────────────────────────────
 
 type Tenant struct {
-	ID               uuid.UUID
-	Name             string
-	Plan             string
-	QuotaClicksMonth int64
-	CustomDomain     string
-	IsActive         bool
+	ID               uuid.UUID `json:"id"`
+	Name             string    `json:"name"`
+	Plan             string    `json:"plan"`
+	QuotaClicksMonth int64     `json:"quota_clicks_month"`
+	CustomDomain     string    `json:"custom_domain"`
+	IsActive         bool      `json:"is_active"`
 }
 
 func (r *Repository) GetTenantByID(ctx context.Context, id uuid.UUID) (*Tenant, error) {
@@ -95,25 +95,25 @@ func (r *Repository) GetQuotaUsage(ctx context.Context, tenantID uuid.UUID) (int
 // ─── Link ────────────────────────────────────────────────────
 
 type Link struct {
-	ID              uuid.UUID
-	TenantID        uuid.UUID
-	ShortCode       string
-	Title           string
-	FallbackURL     string
-	RoutingStrategy string
-	IsActive        bool
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ID              uuid.UUID `json:"id"`
+	TenantID        uuid.UUID `json:"tenant_id"`
+	ShortCode       string    `json:"short_code"`
+	Title           string    `json:"title"`
+	FallbackURL     string    `json:"fallback_url"`
+	RoutingStrategy string    `json:"routing_strategy"`
+	IsActive        bool      `json:"is_active"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type Destination struct {
-	ID            uuid.UUID
-	LinkID        uuid.UUID
-	URL           string
-	Weight        int
-	MaxClicks     *int
-	CurrentClicks int
-	IsActive      bool
+	ID            uuid.UUID `json:"id"`
+	LinkID        uuid.UUID `json:"link_id"`
+	URL           string    `json:"url"`
+	Weight        int       `json:"weight"`
+	MaxClicks     *int      `json:"max_clicks"`
+	CurrentClicks int       `json:"current_clicks"`
+	IsActive      bool      `json:"is_active"`
 }
 
 func (r *Repository) ListLinks(ctx context.Context, tenantID uuid.UUID) ([]Link, error) {
