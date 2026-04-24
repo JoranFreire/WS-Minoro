@@ -235,7 +235,7 @@ export function LinkForm({ link, onClose }: LinkFormProps) {
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-          {error?.response?.data?.message ?? "Erro ao salvar. Verifique os dados e tente novamente."}
+          {error?.response?.data?.message ?? error?.response?.data?.error ?? "Erro ao salvar. Verifique os dados e tente novamente."}
         </div>
       )}
 
