@@ -82,7 +82,7 @@ export function LinkForm({ link, onClose }: LinkFormProps) {
     createLink.isPending || updateLink.isPending || addDestination.isPending;
 
   const error =
-    (createLink.error || updateLink.error || addDestination.error) as { response?: { data?: { message?: string } } } | null;
+    (createLink.error || updateLink.error || addDestination.error) as { response?: { data?: { message?: string; error?: string } } } | null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
