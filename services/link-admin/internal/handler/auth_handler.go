@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -23,6 +24,32 @@ type AuthHandler struct {
 
 func NewAuthHandler(authSvc *service.AuthService, cookieSecure bool) *AuthHandler {
 	return &AuthHandler{authSvc: authSvc, cookieSecure: cookieSecure}
+}
+
+func (h *AuthHandler) Register(c *fiber.Ctx) error {
+	var req struct {
+		TenantName string `json:"tenant_name"`
+		Email      string `json:"email"`
+		Password   string `json:"password"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	accessToken, refreshToken, err := h.authSvc.Register(c.Context(), req.TenantName, req.Email, req.Password)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidRegistration):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tenant name, a valid email and a password with at least 8 characters are required"})
+		case errors.Is(err, service.ErrEmailTaken):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "email already registered"})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to register"})
+		}
+	}
+
+	h.setSessionCookies(c, accessToken, refreshToken)
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "ok"})
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {

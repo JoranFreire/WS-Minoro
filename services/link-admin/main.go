@@ -25,10 +25,11 @@ func main() {
 	linkRepo := repository.NewLinkRepository(pool)
 	apiKeyRepo := repository.NewAPIKeyRepository(pool)
 	analyticsRepo := repository.NewAnalyticsRepository(pool)
+	registrationRepo := repository.NewRegistrationRepository(pool)
 
 	linkSvc := service.NewLinkService(linkRepo)
 	tenantSvc := service.NewTenantService(tenantRepo, apiKeyRepo)
-	authSvc := service.NewAuthService(userRepo, apiKeyRepo, cfg.JWTSecret)
+	authSvc := service.NewAuthService(userRepo, apiKeyRepo, registrationRepo, cfg.JWTSecret)
 
 	linkHandler := handler.NewLinkHandler(linkSvc)
 	tenantHandler := handler.NewTenantHandler(tenantSvc)
@@ -57,6 +58,7 @@ func main() {
 	})
 
 	auth := app.Group("/auth")
+	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", authHandler.Login)
 	auth.Post("/refresh", authHandler.Refresh)
 	auth.Post("/logout", authHandler.Logout)

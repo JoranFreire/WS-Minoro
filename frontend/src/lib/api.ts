@@ -26,6 +26,8 @@ api.interceptors.response.use(
 );
 
 // --- Auth ---
+export const register = (tenantName: string, email: string, password: string) =>
+  api.post<{ message: string }>("/auth/register", { tenant_name: tenantName, email, password });
 export const login = (email: string, password: string) =>
   api.post<{ message: string }>("/auth/login", { email, password });
 export const logout = () => api.post<{ message: string }>("/auth/logout");
