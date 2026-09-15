@@ -184,14 +184,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     environment:
       PORT: 8081
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/wsminoro?sslmode=disable
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-32-chars-minimum}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PAGARME_SECRET_KEY: ${PAGARME_SECRET_KEY:-}
+      PAGARME_WEBHOOK_USER: ${PAGARME_WEBHOOK_USER:-}
+      PAGARME_WEBHOOK_PASSWORD: ${PAGARME_WEBHOOK_PASSWORD:-}
+      PAGARME_PLAN_ID_STARTER: ${PAGARME_PLAN_ID_STARTER:-}
+      PAGARME_PLAN_ID_PRO: ${PAGARME_PLAN_ID_PRO:-}
+      PAGARME_PLAN_ID_BUSINESS: ${PAGARME_PLAN_ID_BUSINESS:-}
     ports:
       - "8081:8081"
     networks:

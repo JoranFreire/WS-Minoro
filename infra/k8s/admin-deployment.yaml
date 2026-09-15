@@ -27,6 +27,11 @@ spec:
                 secretKeyRef:
                   name: wsminoro-secrets
                   key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wsminoro-secrets
+                  key: redis-url
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
@@ -42,6 +47,45 @@ spec:
                 configMapKeyRef:
                   name: wsminoro-config
                   key: cookie-secure
+            # Billing (Pagar.me) — optional. Omit these from wsminoro-secrets
+            # entirely to run without billing; BillingService then reports
+            # "not configured" instead of failing to start.
+            - name: PAGARME_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wsminoro-secrets
+                  key: pagarme-secret-key
+                  optional: true
+            - name: PAGARME_WEBHOOK_USER
+              valueFrom:
+                secretKeyRef:
+                  name: wsminoro-secrets
+                  key: pagarme-webhook-user
+                  optional: true
+            - name: PAGARME_WEBHOOK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: wsminoro-secrets
+                  key: pagarme-webhook-password
+                  optional: true
+            - name: PAGARME_PLAN_ID_STARTER
+              valueFrom:
+                configMapKeyRef:
+                  name: wsminoro-config
+                  key: pagarme-plan-id-starter
+                  optional: true
+            - name: PAGARME_PLAN_ID_PRO
+              valueFrom:
+                configMapKeyRef:
+                  name: wsminoro-config
+                  key: pagarme-plan-id-pro
+                  optional: true
+            - name: PAGARME_PLAN_ID_BUSINESS
+              valueFrom:
+                configMapKeyRef:
+                  name: wsminoro-config
+                  key: pagarme-plan-id-business
+                  optional: true
           resources:
             requests:
               cpu: "100m"

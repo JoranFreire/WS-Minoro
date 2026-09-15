@@ -15,9 +15,21 @@ const minJWTSecretLen = 32
 type Config struct {
 	Port           string
 	DatabaseURL    string
+	RedisURL       string
 	JWTSecret      string
 	FrontendOrigin string
 	CookieSecure   bool
+
+	// Billing (Pagar.me) — all optional. Leaving PagarmeSecretKey unset
+	// disables billing entirely (BillingService.Configured() returns
+	// false) rather than failing to start, so a deployment that doesn't
+	// sell subscriptions yet is unaffected.
+	PagarmeSecretKey      string
+	PagarmeWebhookUser    string
+	PagarmeWebhookPass    string
+	PagarmePlanIDStarter  string
+	PagarmePlanIDPro      string
+	PagarmePlanIDBusiness string
 }
 
 func Load() *Config {
@@ -25,9 +37,17 @@ func Load() *Config {
 	return &Config{
 		Port:           getEnv("PORT", "8081"),
 		DatabaseURL:    getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/wsminoro?sslmode=disable"),
+		RedisURL:       getEnv("REDIS_URL", "redis://localhost:6379"),
 		JWTSecret:      requireJWTSecret(),
 		FrontendOrigin: getEnv("FRONTEND_ORIGIN", "http://localhost:3000"),
 		CookieSecure:   getEnvBool("COOKIE_SECURE", false),
+
+		PagarmeSecretKey:      getEnv("PAGARME_SECRET_KEY", ""),
+		PagarmeWebhookUser:    getEnv("PAGARME_WEBHOOK_USER", ""),
+		PagarmeWebhookPass:    getEnv("PAGARME_WEBHOOK_PASSWORD", ""),
+		PagarmePlanIDStarter:  getEnv("PAGARME_PLAN_ID_STARTER", ""),
+		PagarmePlanIDPro:      getEnv("PAGARME_PLAN_ID_PRO", ""),
+		PagarmePlanIDBusiness: getEnv("PAGARME_PLAN_ID_BUSINESS", ""),
 	}
 }
 

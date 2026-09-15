@@ -9,8 +9,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/ws-minoro/link-admin/config"
+	"github.com/ws-minoro/link-admin/internal/billing"
 	"github.com/ws-minoro/link-admin/internal/handler"
 	"github.com/ws-minoro/link-admin/internal/middleware"
+	"github.com/ws-minoro/link-admin/internal/quota"
 	"github.com/ws-minoro/link-admin/internal/repository"
 	"github.com/ws-minoro/link-admin/internal/service"
 )
@@ -31,11 +33,25 @@ func main() {
 	tenantSvc := service.NewTenantService(tenantRepo, apiKeyRepo)
 	authSvc := service.NewAuthService(userRepo, apiKeyRepo, registrationRepo, cfg.JWTSecret)
 
+	// Billing is optional: a nil client leaves BillingService.Configured()
+	// false, so a deployment without PAGARME_SECRET_KEY set is unaffected.
+	var pagarmeClient service.PagarmeClient
+	if cfg.PagarmeSecretKey != "" {
+		pagarmeClient = billing.NewClient(cfg.PagarmeSecretKey)
+	}
+	quotaUnblocker := quota.NewUnblocker(cfg.RedisURL)
+	billingSvc := service.NewBillingService(tenantRepo, userRepo, pagarmeClient, quotaUnblocker, map[string]string{
+		"starter":  cfg.PagarmePlanIDStarter,
+		"pro":      cfg.PagarmePlanIDPro,
+		"business": cfg.PagarmePlanIDBusiness,
+	})
+
 	linkHandler := handler.NewLinkHandler(linkSvc)
 	tenantHandler := handler.NewTenantHandler(tenantSvc)
 	authHandler := handler.NewAuthHandler(authSvc, cfg.CookieSecure)
 	apikeyHandler := handler.NewAPIKeyHandler(tenantSvc)
 	analyticsHandler := handler.NewAnalyticsHandler(linkRepo, analyticsRepo)
+	billingHandler := handler.NewBillingHandler(billingSvc, cfg.PagarmeWebhookUser, cfg.PagarmeWebhookPass)
 
 	authMw := middleware.NewAuthMiddleware(authSvc)
 
@@ -56,6 +72,11 @@ func main() {
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
+
+	// Not under authMw.Authenticate — Pagar.me is the caller, authenticated
+	// via its own Basic Auth credentials (see BillingHandler.Webhook), not
+	// a user's JWT.
+	app.Post("/webhooks/pagarme", billingHandler.Webhook)
 
 	auth := app.Group("/auth")
 	auth.Post("/register", authHandler.Register)
@@ -87,6 +108,9 @@ func main() {
 	analytics.Get("/:id", analyticsHandler.GetTimeSeries)
 	analytics.Get("/:id/countries", analyticsHandler.GetCountries)
 	analytics.Get("/:id/devices", analyticsHandler.GetDevices)
+
+	billingRoutes := api.Group("/billing")
+	billingRoutes.Post("/subscribe", billingHandler.Subscribe)
 
 	if err := app.Listen(":" + cfg.Port); err != nil {
 		log.Fatalf("server error: %v", err)

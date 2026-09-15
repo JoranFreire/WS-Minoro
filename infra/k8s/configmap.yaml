@@ -9,3 +9,8 @@ data:
   # ingress.yaml yet (only the router and API subdomains are routed there).
   frontend-origin: "https://dashboard.example.com"
   cookie-secure: "true"
+  # Billing (Pagar.me) — plan IDs from your Pagar.me dashboard's Plans
+  # product. Leave blank (or drop the keys) to run without billing.
+  pagarme-plan-id-starter: ""
+  pagarme-plan-id-pro: ""
+  pagarme-plan-id-business: ""
