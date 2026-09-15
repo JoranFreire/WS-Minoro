@@ -32,6 +32,16 @@ spec:
                 secretKeyRef:
                   name: wsminoro-secrets
                   key: jwt-secret
+            - name: FRONTEND_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: wsminoro-config
+                  key: frontend-origin
+            - name: COOKIE_SECURE
+              valueFrom:
+                configMapKeyRef:
+                  name: wsminoro-config
+                  key: cookie-secure
           resources:
             requests:
               cpu: "100m"
@@ -45,6 +55,12 @@ spec:
               port: 8081
             initialDelaySeconds: 10
             periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service

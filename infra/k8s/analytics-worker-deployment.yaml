@@ -18,14 +18,37 @@ spec:
         - name: analytics-worker
           image: wsminoro/analytics-worker:latest
           imagePullPolicy: Always
-          envFrom:
-            - configMapRef:
-                name: wsminoro-config
+          ports:
+            - containerPort: 8082
           env:
+            - name: HEALTH_PORT
+              value: "8082"
             - name: KAFKA_GROUP_ID
               value: "analytics-worker"
             - name: KAFKA_TOPIC
               value: "click.raw"
+            - name: CASSANDRA_HOSTS
+              value: "cassandra"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wsminoro-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: wsminoro-secrets
+                  key: redis-url
+            - name: KAFKA_BROKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: wsminoro-config
+                  key: kafka-brokers
+            - name: CASSANDRA_KEYSPACE
+              valueFrom:
+                configMapKeyRef:
+                  name: wsminoro-config
+                  key: cassandra-keyspace
           resources:
             requests:
               cpu: "100m"
@@ -34,10 +57,17 @@ spec:
               cpu: "500m"
               memory: "512Mi"
           livenessProbe:
-            exec:
-              command: ["true"]
+            httpGet:
+              path: /health
+              port: 8082
             initialDelaySeconds: 10
-            periodSeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 5
+            periodSeconds: 10
       restartPolicy: Always
 ---
 apiVersion: policy/v1

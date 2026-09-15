@@ -5,3 +5,7 @@ metadata:
 data:
   kafka-brokers: "kafka:9092"
   cassandra-keyspace: "link_analytics"
+  # TODO: set to the real dashboard origin before deploying — it isn't in
+  # ingress.yaml yet (only the router and API subdomains are routed there).
+  frontend-origin: "https://dashboard.example.com"
+  cookie-secure: "true"
