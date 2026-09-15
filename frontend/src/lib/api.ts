@@ -124,4 +124,13 @@ export interface QuotaInfo {
 export const getTenant = () => api.get<Tenant>("/api/v1/tenants/me");
 export const getQuota = () => api.get<QuotaInfo>("/api/v1/tenants/me/quota");
 
+// --- Billing ---
+export type Plan = "starter" | "pro" | "business";
+
+export const subscribeToPlan = (plan: Plan, cardToken: string) =>
+  api.post<{ plan: string; quota_clicks_month: number }>("/api/v1/billing/subscribe", {
+    plan,
+    card_token: cardToken,
+  });
+
 export default api;

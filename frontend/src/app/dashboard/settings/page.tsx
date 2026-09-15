@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useTenant } from "@/hooks/useQuota";
 
 export default function SettingsPage() {
@@ -34,6 +35,12 @@ export default function SettingsPage() {
             <dd className="font-mono text-xs text-gray-500">{tenant?.id ?? "–"}</dd>
           </div>
         </dl>
+        <Link
+          href="/dashboard/billing"
+          className="mt-4 inline-block text-sm text-green-700 font-medium hover:text-green-800"
+        >
+          Change plan →
+        </Link>
       </div>
     </div>
   );
