@@ -9,11 +9,12 @@ import (
 )
 
 type AnalyticsHandler struct {
-	repo *repository.Repository
+	links     *repository.LinkRepository
+	analytics *repository.AnalyticsRepository
 }
 
-func NewAnalyticsHandler(repo *repository.Repository) *AnalyticsHandler {
-	return &AnalyticsHandler{repo: repo}
+func NewAnalyticsHandler(links *repository.LinkRepository, analytics *repository.AnalyticsRepository) *AnalyticsHandler {
+	return &AnalyticsHandler{links: links, analytics: analytics}
 }
 
 // parseTimeRange reads optional `from` / `to` query params (YYYY-MM-DD).
@@ -54,11 +55,11 @@ func (h *AnalyticsHandler) GetTimeSeries(c *fiber.Ctx) error {
 
 	from, to := parseTimeRange(c)
 
-	if _, err := h.repo.GetLinkByID(c.Context(), linkID, tenantID); err != nil {
+	if _, err := h.links.GetLinkByID(c.Context(), linkID, tenantID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "link not found"})
 	}
 
-	data, err := h.repo.GetClickTimeSeries(c.Context(), linkID, from, to, granularity)
+	data, err := h.analytics.GetClickTimeSeries(c.Context(), linkID, from, to, granularity)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -81,11 +82,11 @@ func (h *AnalyticsHandler) GetCountries(c *fiber.Ctx) error {
 
 	from, to := parseTimeRange(c)
 
-	if _, err := h.repo.GetLinkByID(c.Context(), linkID, tenantID); err != nil {
+	if _, err := h.links.GetLinkByID(c.Context(), linkID, tenantID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "link not found"})
 	}
 
-	data, err := h.repo.GetClicksByCountry(c.Context(), linkID, from, to)
+	data, err := h.analytics.GetClicksByCountry(c.Context(), linkID, from, to)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -108,11 +109,11 @@ func (h *AnalyticsHandler) GetDevices(c *fiber.Ctx) error {
 
 	from, to := parseTimeRange(c)
 
-	if _, err := h.repo.GetLinkByID(c.Context(), linkID, tenantID); err != nil {
+	if _, err := h.links.GetLinkByID(c.Context(), linkID, tenantID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "link not found"})
 	}
 
-	data, err := h.repo.GetClicksByDevice(c.Context(), linkID, from, to)
+	data, err := h.analytics.GetClicksByDevice(c.Context(), linkID, from, to)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}

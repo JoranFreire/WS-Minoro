@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ─── Analytics ───────────────────────────────────────────────
@@ -24,8 +25,16 @@ type ClickByDevice struct {
 	Clicks     int64  `json:"clicks"`
 }
 
+type AnalyticsRepository struct {
+	pool *pgxpool.Pool
+}
+
+func NewAnalyticsRepository(pool *pgxpool.Pool) *AnalyticsRepository {
+	return &AnalyticsRepository{pool: pool}
+}
+
 // GetClickTimeSeries returns hourly or daily click aggregates for a link.
-func (r *Repository) GetClickTimeSeries(
+func (r *AnalyticsRepository) GetClickTimeSeries(
 	ctx context.Context,
 	linkID uuid.UUID,
 	from, to time.Time,
@@ -57,7 +66,7 @@ func (r *Repository) GetClickTimeSeries(
 }
 
 // GetClicksByCountry returns click counts grouped by country for a link.
-func (r *Repository) GetClicksByCountry(
+func (r *AnalyticsRepository) GetClicksByCountry(
 	ctx context.Context,
 	linkID uuid.UUID,
 	from, to time.Time,
@@ -89,7 +98,7 @@ func (r *Repository) GetClicksByCountry(
 }
 
 // GetClicksByDevice returns click counts grouped by device type for a link.
-func (r *Repository) GetClicksByDevice(
+func (r *AnalyticsRepository) GetClicksByDevice(
 	ctx context.Context,
 	linkID uuid.UUID,
 	from, to time.Time,
