@@ -3,9 +3,9 @@ package writer
 import (
 	"context"
 	"time"
+	"uuid"
 
 	"github.com/gocql/gocql"
-	"github.com/google/uuid"
 )
 
 type ClickRecord struct {
@@ -54,13 +54,17 @@ func (w *CassandraWriter) WriteClick(ctx context.Context, click ClickRecord) err
 	day := click.Timestamp.Format("2006-01-02")
 	clickID := gocql.TimeUUID()
 
+	// gocql doesn't recognize the stdlib uuid.UUID type for marshaling
+	// (confirmed against a real Cassandra: "can not marshal uuid.UUID into
+	// uuid"), only its own gocql.UUID — also a [16]byte, so a direct type
+	// conversion is all that's needed at this one boundary.
 	return w.session.Query(`
 		INSERT INTO clicks_by_link
 		(link_id, day, click_id, destination_url, country, city,
 		 device_type, browser, os, referer, ip_hash, tenant_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
-		linkID, day, clickID, click.DestinationURL, click.Country, click.City,
-		click.DeviceType, click.Browser, click.OS, click.Referer, click.IPHash, tenantID,
+		gocql.UUID(linkID), day, clickID, click.DestinationURL, click.Country, click.City,
+		click.DeviceType, click.Browser, click.OS, click.Referer, click.IPHash, gocql.UUID(tenantID),
 	).WithContext(ctx).Exec()
 }

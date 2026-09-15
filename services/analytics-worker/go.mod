@@ -5,7 +5,6 @@ go 1.27
 require (
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/gocql/gocql v1.6.0
-	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/joho/godotenv v1.5.1
 	github.com/mssola/useragent v1.0.0
