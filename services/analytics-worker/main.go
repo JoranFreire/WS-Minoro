@@ -10,6 +10,7 @@ import (
 	"github.com/ws-minoro/analytics-worker/config"
 	"github.com/ws-minoro/analytics-worker/internal/aggregator"
 	"github.com/ws-minoro/analytics-worker/internal/consumer"
+	"github.com/ws-minoro/analytics-worker/internal/health"
 	"github.com/ws-minoro/analytics-worker/internal/writer"
 )
 
@@ -20,7 +21,10 @@ func main() {
 	pgWriter := writer.NewPGWriter(cfg.DatabaseURL)
 	redisAgg := aggregator.NewRedisAggregator(cfg.RedisURL)
 
-	processor := consumer.NewClickProcessor(cassandraWriter, pgWriter, redisAgg)
+	tracker := health.NewTracker()
+	health.Serve(":"+cfg.HealthPort, tracker)
+
+	processor := consumer.NewClickProcessor(cassandraWriter, pgWriter, redisAgg, tracker)
 	kafkaConsumer := consumer.NewKafkaConsumer(cfg.KafkaBrokers, cfg.KafkaTopic, cfg.KafkaGroupID, processor)
 
 	ctx, cancel := context.WithCancel(context.Background())

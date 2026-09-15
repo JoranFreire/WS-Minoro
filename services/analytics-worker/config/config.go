@@ -8,6 +8,7 @@ import (
 )
 
 type Config struct {
+	HealthPort        string
 	DatabaseURL       string
 	RedisURL          string
 	KafkaBrokers      []string
@@ -20,6 +21,7 @@ type Config struct {
 func Load() *Config {
 	_ = godotenv.Load()
 	return &Config{
+		HealthPort:        getEnv("HEALTH_PORT", "8082"),
 		DatabaseURL:       getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/wsminoro?sslmode=disable"),
 		RedisURL:          getEnv("REDIS_URL", "redis://localhost:6379"),
 		KafkaBrokers:      strings.Split(getEnv("KAFKA_BROKERS", "localhost:9092"), ","),
