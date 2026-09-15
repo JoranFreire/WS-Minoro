@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/billing"
 	"github.com/ws-minoro/link-admin/internal/repository"
+	"uuid"
 )
 
 var ErrBillingNotConfigured = errors.New("billing not configured")

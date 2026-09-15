@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/middleware"
 	"github.com/ws-minoro/link-admin/internal/service"
+	"uuid"
 )
 
 type BillingHandler struct {
@@ -27,7 +27,7 @@ func NewBillingHandler(billingSvc *service.BillingService, webhookUser, webhookP
 func getUserID(c *fiber.Ctx) (uuid.UUID, error) {
 	claims, ok := c.Locals(middleware.UserContextKey).(*service.Claims)
 	if !ok {
-		return uuid.Nil, fiber.ErrUnauthorized
+		return uuid.Nil(), fiber.ErrUnauthorized
 	}
 	return uuid.Parse(claims.UserID)
 }

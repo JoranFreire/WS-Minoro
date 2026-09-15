@@ -2,9 +2,9 @@ package handler
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/middleware"
 	"github.com/ws-minoro/link-admin/internal/service"
+	"uuid"
 )
 
 type APIKeyHandler struct {

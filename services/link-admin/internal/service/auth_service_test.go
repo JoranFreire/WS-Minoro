@@ -7,9 +7,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/repository"
 	"golang.org/x/crypto/bcrypt"
+	"uuid"
 )
 
 // sha256Hex mirrors the hashing ValidateAPIKey performs internally, so tests

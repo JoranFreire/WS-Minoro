@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/repository"
+	"uuid"
 )
 
 // TenantRepo and APIKeyRepo are the subsets of their repositories

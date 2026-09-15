@@ -5,8 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/repository"
+	"uuid"
 )
 
 // LinkRepo is the subset of repository.LinkRepository LinkService depends

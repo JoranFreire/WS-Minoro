@@ -2,9 +2,9 @@ package handler
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/middleware"
 	"github.com/ws-minoro/link-admin/internal/service"
+	"uuid"
 )
 
 type LinkHandler struct {
@@ -18,7 +18,7 @@ func NewLinkHandler(linkSvc *service.LinkService) *LinkHandler {
 func getTenantID(c *fiber.Ctx) (uuid.UUID, error) {
 	claims, ok := c.Locals(middleware.UserContextKey).(*service.Claims)
 	if !ok {
-		return uuid.Nil, fiber.ErrUnauthorized
+		return uuid.Nil(), fiber.ErrUnauthorized
 	}
 	return uuid.Parse(claims.TenantID)
 }

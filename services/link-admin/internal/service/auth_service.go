@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/repository"
 	"golang.org/x/crypto/bcrypt"
+	"uuid"
 )
 
 var ErrInvalidCredentials = errors.New("invalid credentials")

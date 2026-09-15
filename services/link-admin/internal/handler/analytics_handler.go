@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/repository"
+	"uuid"
 )
 
 type AnalyticsHandler struct {

@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/repository"
+	"uuid"
 )
 
 type fakeLinkRepo struct {

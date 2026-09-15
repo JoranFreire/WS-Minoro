@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/ws-minoro/link-admin/internal/repository"
 	"github.com/ws-minoro/link-admin/internal/service"
+	"uuid"
 )
 
 type fakeAuthValidator struct {
