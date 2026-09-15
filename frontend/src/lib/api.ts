@@ -133,4 +133,7 @@ export const subscribeToPlan = (plan: Plan, cardToken: string) =>
     card_token: cardToken,
   });
 
+export const cancelSubscription = () =>
+  api.delete<{ plan: string; quota_clicks_month: number }>("/api/v1/billing/subscription");
+
 export default api;

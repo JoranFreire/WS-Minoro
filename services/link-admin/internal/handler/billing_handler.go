@@ -69,6 +69,29 @@ func (h *BillingHandler) Subscribe(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"plan": req.Plan, "quota_clicks_month": quota})
 }
 
+// Cancel handles DELETE /api/v1/billing/subscription — the user-initiated
+// counterpart to the subscription.canceled webhook.
+func (h *BillingHandler) Cancel(c *fiber.Ctx) error {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+	}
+
+	if err := h.billingSvc.Cancel(c.Context(), tenantID); err != nil {
+		switch {
+		case errors.Is(err, service.ErrBillingNotConfigured):
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "billing is not configured"})
+		case errors.Is(err, service.ErrNoActiveSubscription):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "no active subscription to cancel"})
+		default:
+			log.Printf("billing: cancel tenant=%s: %v", tenantID, err)
+			return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "failed to cancel subscription"})
+		}
+	}
+
+	return c.JSON(fiber.Map{"plan": service.FreePlan, "quota_clicks_month": service.PlanQuotas[service.FreePlan]})
+}
+
 type pagarmeWebhookPayload struct {
 	Type string `json:"type"`
 	Data struct {

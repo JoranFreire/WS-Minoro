@@ -11,6 +11,7 @@ import (
 
 var ErrBillingNotConfigured = errors.New("billing not configured")
 var ErrUnknownPlan = errors.New("unknown plan")
+var ErrNoActiveSubscription = errors.New("no active subscription")
 
 const (
 	FreePlan            = "free"
@@ -20,7 +21,10 @@ const (
 // PlanQuotas maps a plan name to its monthly click quota — the actual
 // metered resource in the monetization model. Pricing itself lives in
 // Pagar.me's dashboard (referenced by plan ID via config), never here.
+// "free" has no entry in planIDs (config never sets PAGARME_PLAN_ID_FREE),
+// so Subscribe still rejects it even though it's listed here for display.
 var PlanQuotas = map[string]int64{
+	FreePlan:   freePlanQuotaClicks,
 	"starter":  50_000,
 	"pro":      500_000,
 	"business": 5_000_000,
@@ -128,11 +132,38 @@ func (s *BillingService) HandleChargePaid(ctx context.Context, pagarmeCustomerID
 }
 
 // HandleSubscriptionCanceled reacts to a Pagar.me `subscription.canceled`
-// webhook by reverting the tenant to the free plan.
+// webhook (e.g. cancellation initiated from Pagar.me's own dashboard, or a
+// failed-payment auto-cancel) by reverting the tenant to the free plan.
 func (s *BillingService) HandleSubscriptionCanceled(ctx context.Context, pagarmeCustomerID string) error {
 	tenant, err := s.tenants.GetTenantByPagarmeCustomerID(ctx, pagarmeCustomerID)
 	if err != nil {
 		return err
 	}
-	return s.tenants.UpdateSubscription(ctx, tenant.ID, FreePlan, freePlanQuotaClicks, "")
+	return s.revertToFreePlan(ctx, tenant.ID)
+}
+
+// Cancel is the user-initiated counterpart to HandleSubscriptionCanceled —
+// triggered from the tenant's own dashboard rather than a Pagar.me webhook.
+func (s *BillingService) Cancel(ctx context.Context, tenantID uuid.UUID) error {
+	if !s.Configured() {
+		return ErrBillingNotConfigured
+	}
+
+	tenant, err := s.tenants.GetTenantByID(ctx, tenantID)
+	if err != nil {
+		return err
+	}
+	if tenant.PagarmeSubscriptionID == "" {
+		return ErrNoActiveSubscription
+	}
+
+	if err := s.client.CancelSubscription(ctx, tenant.PagarmeSubscriptionID); err != nil {
+		return err
+	}
+
+	return s.revertToFreePlan(ctx, tenantID)
+}
+
+func (s *BillingService) revertToFreePlan(ctx context.Context, tenantID uuid.UUID) error {
+	return s.tenants.UpdateSubscription(ctx, tenantID, FreePlan, freePlanQuotaClicks, "")
 }

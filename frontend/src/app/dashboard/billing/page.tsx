@@ -2,6 +2,8 @@
 
 import Script from "next/script";
 import { useBillingCheckout } from "./useBillingCheckout";
+import { CancelSubscriptionButton } from "./CancelSubscriptionButton";
+import { useTenant } from "@/hooks/useQuota";
 import type { Plan } from "@/lib/api";
 
 const PLANS: { id: Plan; label: string; quota: string }[] = [
@@ -15,7 +17,9 @@ const INPUT =
 
 export default function BillingPage() {
   const { plan, setPlan, error, submitting, onScriptLoad } = useBillingCheckout();
+  const { data: tenant } = useTenant();
   const publicKey = process.env.NEXT_PUBLIC_PAGARME_PUBLIC_KEY;
+  const currentPlan = PLANS.find((p) => p.id === tenant?.plan);
 
   if (!publicKey) {
     return (
@@ -44,6 +48,17 @@ export default function BillingPage() {
         data-pagarmecheckout-app-id={publicKey}
         onLoad={onScriptLoad}
       />
+
+      {currentPlan && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">Current plan</h2>
+          <p className="text-sm text-gray-900 font-medium">{currentPlan.label}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{currentPlan.quota}</p>
+          <div className="mt-3">
+            <CancelSubscriptionButton />
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
         {error && (

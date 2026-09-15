@@ -111,6 +111,7 @@ func main() {
 
 	billingRoutes := api.Group("/billing")
 	billingRoutes.Post("/subscribe", billingHandler.Subscribe)
+	billingRoutes.Delete("/subscription", billingHandler.Cancel)
 
 	if err := app.Listen(":" + cfg.Port); err != nil {
 		log.Fatalf("server error: %v", err)

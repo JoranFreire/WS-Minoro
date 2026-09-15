@@ -67,9 +67,11 @@ func (f *fakeBillingTenantRepo) UpdateSubscription(ctx context.Context, tenantID
 }
 
 type fakePagarmeClient struct {
-	sub        *billing.Subscription
-	createErr  error
-	createdFor []billing.CreateSubscriptionInput
+	sub         *billing.Subscription
+	createErr   error
+	createdFor  []billing.CreateSubscriptionInput
+	cancelErr   error
+	canceledIDs []string
 }
 
 func (f *fakePagarmeClient) CreateSubscription(ctx context.Context, in billing.CreateSubscriptionInput) (*billing.Subscription, error) {
@@ -81,7 +83,8 @@ func (f *fakePagarmeClient) CreateSubscription(ctx context.Context, in billing.C
 }
 
 func (f *fakePagarmeClient) CancelSubscription(ctx context.Context, subscriptionID string) error {
-	return nil
+	f.canceledIDs = append(f.canceledIDs, subscriptionID)
+	return f.cancelErr
 }
 
 type fakeQuotaUnblocker struct {
@@ -237,5 +240,66 @@ func TestHandleSubscriptionCanceled_RevertsToFreePlan(t *testing.T) {
 	got := tenants.updateCalls[0]
 	if got.plan != FreePlan || got.quota != freePlanQuotaClicks {
 		t.Fatalf("expected revert to free plan, got %+v", got)
+	}
+}
+
+func TestCancel_NotConfiguredReturnsError(t *testing.T) {
+	svc, _, _, _, _ := newTestBillingService(t, false)
+
+	err := svc.Cancel(context.Background(), uuid.New())
+	if !errors.Is(err, ErrBillingNotConfigured) {
+		t.Fatalf("expected ErrBillingNotConfigured, got %v", err)
+	}
+}
+
+func TestCancel_NoActiveSubscriptionRejected(t *testing.T) {
+	svc, tenants, _, client, _ := newTestBillingService(t, true)
+	tenantID := uuid.New()
+	tenants.tenants[tenantID] = &repository.Tenant{ID: tenantID, PagarmeSubscriptionID: ""}
+
+	err := svc.Cancel(context.Background(), tenantID)
+	if !errors.Is(err, ErrNoActiveSubscription) {
+		t.Fatalf("expected ErrNoActiveSubscription, got %v", err)
+	}
+	if len(client.canceledIDs) != 0 {
+		t.Fatal("must not call Pagar.me when there is nothing to cancel")
+	}
+}
+
+func TestCancel_Success(t *testing.T) {
+	svc, tenants, _, client, _ := newTestBillingService(t, true)
+	tenantID := uuid.New()
+	tenants.tenants[tenantID] = &repository.Tenant{
+		ID: tenantID, Plan: "pro", PagarmeSubscriptionID: "sub_456",
+	}
+
+	if err := svc.Cancel(context.Background(), tenantID); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(client.canceledIDs) != 1 || client.canceledIDs[0] != "sub_456" {
+		t.Fatalf("expected Pagar.me subscription sub_456 to be canceled, got %+v", client.canceledIDs)
+	}
+	if len(tenants.updateCalls) != 1 {
+		t.Fatalf("expected 1 update call, got %d", len(tenants.updateCalls))
+	}
+	got := tenants.updateCalls[0]
+	if got.tenantID != tenantID || got.plan != FreePlan || got.quota != freePlanQuotaClicks || got.subscriptionID != "" {
+		t.Fatalf("expected revert to free plan with subscription cleared, got %+v", got)
+	}
+}
+
+func TestCancel_PagarmeErrorSkipsPlanRevert(t *testing.T) {
+	svc, tenants, _, client, _ := newTestBillingService(t, true)
+	client.cancelErr = errors.New("pagar.me is down")
+	tenantID := uuid.New()
+	tenants.tenants[tenantID] = &repository.Tenant{ID: tenantID, PagarmeSubscriptionID: "sub_456"}
+
+	err := svc.Cancel(context.Background(), tenantID)
+	if err == nil {
+		t.Fatal("expected an error when Pagar.me fails to cancel")
+	}
+	if len(tenants.updateCalls) != 0 {
+		t.Fatal("must not revert the tenant's plan if Pagar.me never confirmed the cancellation")
 	}
 }
