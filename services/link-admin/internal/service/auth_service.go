@@ -16,6 +16,11 @@ import (
 var ErrInvalidCredentials = errors.New("invalid credentials")
 var ErrUnauthorized = errors.New("unauthorized")
 
+const (
+	AccessTokenTTL  = 15 * time.Minute
+	RefreshTokenTTL = 7 * 24 * time.Hour
+)
+
 type Claims struct {
 	UserID   string `json:"user_id"`
 	TenantID string `json:"tenant_id"`
@@ -23,17 +28,29 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// UserGetter and APIKeyGetter are the subsets of their repositories
+// AuthService depends on. Defined here so tests can inject fakes instead of
+// requiring a live Postgres connection.
+type UserGetter interface {
+	GetUserByEmail(ctx context.Context, email string) (*repository.User, error)
+}
+
+type APIKeyGetter interface {
+	GetAPIKeyByHash(ctx context.Context, keyHash string) (*repository.APIKey, error)
+}
+
 type AuthService struct {
-	repo      *repository.Repository
+	users     UserGetter
+	apiKeys   APIKeyGetter
 	jwtSecret string
 }
 
-func NewAuthService(repo *repository.Repository, jwtSecret string) *AuthService {
-	return &AuthService{repo: repo, jwtSecret: jwtSecret}
+func NewAuthService(users UserGetter, apiKeys APIKeyGetter, jwtSecret string) *AuthService {
+	return &AuthService{users: users, apiKeys: apiKeys, jwtSecret: jwtSecret}
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (accessToken, refreshToken string, err error) {
-	user, err := s.repo.GetUserByEmail(ctx, email)
+	user, err := s.users.GetUserByEmail(ctx, email)
 	if err != nil {
 		return "", "", ErrInvalidCredentials
 	}
@@ -42,12 +59,12 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (access
 		return "", "", ErrInvalidCredentials
 	}
 
-	accessToken, err = s.generateToken(user, 15*time.Minute)
+	accessToken, err = s.generateToken(user, AccessTokenTTL)
 	if err != nil {
 		return "", "", err
 	}
 
-	refreshToken, err = s.generateToken(user, 7*24*time.Hour)
+	refreshToken, err = s.generateToken(user, RefreshTokenTTL)
 	if err != nil {
 		return "", "", err
 	}
@@ -76,7 +93,7 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, keyStr string) (*repos
 	hash := sha256.Sum256([]byte(keyStr))
 	keyHash := hex.EncodeToString(hash[:])
 
-	apiKey, err := s.repo.GetAPIKeyByHash(ctx, keyHash)
+	apiKey, err := s.apiKeys.GetAPIKeyByHash(ctx, keyHash)
 	if err != nil || !apiKey.IsActive {
 		return nil, ErrUnauthorized
 	}

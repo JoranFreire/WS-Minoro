@@ -3,6 +3,7 @@ module github.com/ws-minoro/analytics-worker
 go 1.23
 
 require (
+	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/gocql/gocql v1.6.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.5.5
@@ -23,6 +24,7 @@ require (
 	github.com/klauspost/compress v1.15.9 // indirect
 	github.com/pierrec/lz4/v4 v4.1.15 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/text v0.14.0 // indirect

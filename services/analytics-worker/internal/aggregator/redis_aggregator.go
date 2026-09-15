@@ -20,6 +20,12 @@ func NewRedisAggregator(redisURL string) *RedisAggregator {
 	return &RedisAggregator{client: redis.NewClient(opt)}
 }
 
+// NewRedisAggregatorWithClient wraps an existing redis client, allowing
+// tests to inject a fake/in-memory client instead of dialing a real server.
+func NewRedisAggregatorWithClient(client *redis.Client) *RedisAggregator {
+	return &RedisAggregator{client: client}
+}
+
 func (a *RedisAggregator) IncrClick(ctx context.Context, linkID, tenantID string, ts time.Time) error {
 	hourKey := fmt.Sprintf("agg:link:%s:hour:%s", linkID, ts.Format("2006010215"))
 	dayKey := fmt.Sprintf("agg:link:%s:day:%s", linkID, ts.Format("20060102"))

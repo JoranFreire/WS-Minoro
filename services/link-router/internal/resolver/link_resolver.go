@@ -21,10 +21,27 @@ const routeCacheTTL = 60 * time.Second
 
 var ErrNotFound = errors.New("route not found")
 
+// Store is the subset of store.PGStore the resolver depends on. Defined here
+// (rather than depended on directly) so tests can inject a fake instead of
+// requiring a live Postgres connection.
+type Store interface {
+	GetRouteByShortCode(ctx context.Context, shortCode string) (*store.RouteData, error)
+	GetRouteByShortCodeAndTenant(ctx context.Context, shortCode, tenantID string) (*store.RouteData, error)
+	GetTenantIDByCustomDomain(ctx context.Context, domain string) (string, error)
+	IncrDestinationClicks(ctx context.Context, destID string) (store.ClickResult, error)
+	DisableDestination(ctx context.Context, destID string) error
+}
+
+// HealthPublisher is the subset of event.HealthPublisher the resolver depends
+// on. Defined here so tests can inject a fake instead of requiring Kafka.
+type HealthPublisher interface {
+	PublishDisabled(ctx context.Context, evt event.HealthEvent)
+}
+
 type LinkResolver struct {
 	cache         *cache.RedisCache
-	store         *store.PGStore
-	healthPub     *event.HealthPublisher
+	store         Store
+	healthPub     HealthPublisher
 	maxRiskScore  float64
 	defaultDomain string
 	redisBreaker  *breaker.CircuitBreaker
@@ -33,8 +50,8 @@ type LinkResolver struct {
 
 func NewLinkResolver(
 	c *cache.RedisCache,
-	s *store.PGStore,
-	hp *event.HealthPublisher,
+	s Store,
+	hp HealthPublisher,
 	maxRiskScore float64,
 	defaultDomain string,
 ) *LinkResolver {

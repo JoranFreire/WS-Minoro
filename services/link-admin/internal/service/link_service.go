@@ -9,11 +9,26 @@ import (
 	"github.com/ws-minoro/link-admin/internal/repository"
 )
 
-type LinkService struct {
-	repo *repository.Repository
+// LinkRepo is the subset of repository.LinkRepository LinkService depends
+// on. Defined here so tests can inject a fake instead of requiring a live
+// Postgres connection.
+type LinkRepo interface {
+	ListLinks(ctx context.Context, tenantID uuid.UUID) ([]repository.Link, error)
+	GetLinkByID(ctx context.Context, id, tenantID uuid.UUID) (*repository.Link, error)
+	CreateLink(ctx context.Context, l *repository.Link) error
+	UpdateLink(ctx context.Context, l *repository.Link) error
+	DeleteLink(ctx context.Context, id, tenantID uuid.UUID) error
+	ListDestinations(ctx context.Context, linkID uuid.UUID) ([]repository.Destination, error)
+	CreateDestination(ctx context.Context, d *repository.Destination) error
+	UpdateDestination(ctx context.Context, d *repository.Destination) error
+	DeleteDestination(ctx context.Context, destID, linkID uuid.UUID) error
 }
 
-func NewLinkService(repo *repository.Repository) *LinkService {
+type LinkService struct {
+	repo LinkRepo
+}
+
+func NewLinkService(repo LinkRepo) *LinkService {
 	return &LinkService{repo: repo}
 }
 

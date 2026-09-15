@@ -10,12 +10,26 @@ import (
 	"github.com/ws-minoro/link-admin/internal/repository"
 )
 
-type TenantService struct {
-	repo *repository.Repository
+// TenantRepo and APIKeyRepo are the subsets of their repositories
+// TenantService depends on. Defined here so tests can inject fakes instead
+// of requiring a live Postgres connection.
+type TenantRepo interface {
+	GetTenantByID(ctx context.Context, id uuid.UUID) (*repository.Tenant, error)
+	GetQuotaUsage(ctx context.Context, tenantID uuid.UUID) (int64, error)
 }
 
-func NewTenantService(repo *repository.Repository) *TenantService {
-	return &TenantService{repo: repo}
+type APIKeyRepo interface {
+	CreateAPIKey(ctx context.Context, k *repository.APIKey) error
+	DeleteAPIKey(ctx context.Context, id, tenantID uuid.UUID) error
+}
+
+type TenantService struct {
+	repo    TenantRepo
+	apiKeys APIKeyRepo
+}
+
+func NewTenantService(repo TenantRepo, apiKeys APIKeyRepo) *TenantService {
+	return &TenantService{repo: repo, apiKeys: apiKeys}
 }
 
 func (s *TenantService) GetTenant(ctx context.Context, tenantID uuid.UUID) (*repository.Tenant, error) {
@@ -46,12 +60,12 @@ func (s *TenantService) CreateAPIKey(ctx context.Context, tenantID uuid.UUID, la
 		Permissions: []byte(`{}`),
 		IsActive:    true,
 	}
-	if err := s.repo.CreateAPIKey(ctx, key); err != nil {
+	if err := s.apiKeys.CreateAPIKey(ctx, key); err != nil {
 		return "", err
 	}
 	return rawKey, nil
 }
 
 func (s *TenantService) DeleteAPIKey(ctx context.Context, keyID, tenantID uuid.UUID) error {
-	return s.repo.DeleteAPIKey(ctx, keyID, tenantID)
+	return s.apiKeys.DeleteAPIKey(ctx, keyID, tenantID)
 }

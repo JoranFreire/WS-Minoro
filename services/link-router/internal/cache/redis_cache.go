@@ -19,6 +19,12 @@ func NewRedisCache(redisURL string) *RedisCache {
 	return &RedisCache{client: redis.NewClient(opt)}
 }
 
+// NewRedisCacheWithClient wraps an existing redis client, allowing tests to
+// inject a fake/in-memory client instead of dialing a real Redis server.
+func NewRedisCacheWithClient(client *redis.Client) *RedisCache {
+	return &RedisCache{client: client}
+}
+
 func (r *RedisCache) Get(ctx context.Context, key string) (string, error) {
 	return r.client.Get(ctx, key).Result()
 }
