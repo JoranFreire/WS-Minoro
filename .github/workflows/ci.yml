@@ -15,11 +15,11 @@ jobs:
       matrix:
         include:
           - service: link-router
-            go-version: "1.22"
+            go-version: "1.25"
           - service: link-admin
-            go-version: "1.22"
+            go-version: "1.25"
           - service: analytics-worker
-            go-version: "1.23"
+            go-version: "1.25"
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
