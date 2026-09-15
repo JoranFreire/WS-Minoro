@@ -409,3 +409,95 @@ func TestRouteData_JSONRoundTrip(t *testing.T) {
 		t.Fatalf("round trip mismatch: %+v", decoded)
 	}
 }
+
+func TestResolve_OverQuotaTenantGetsFallbackURL(t *testing.T) {
+	fs := newFakeStore()
+	fs.routesByCode["abc"] = &store.RouteData{
+		LinkID: "link-1", TenantID: "tenant-over-quota", ShortCode: "abc",
+		FallbackURL: "https://fallback.example.com",
+		Destinations: []store.Destination{
+			{ID: "d1", URL: "https://example.com/a", Weight: 1},
+		},
+	}
+	r := newTestResolver(t, fs, &fakeHealthPublisher{}, 0.7)
+	ctx := context.Background()
+	if err := r.cache.Set(ctx, quotaBlockedKey("tenant-over-quota"), "1", time.Hour); err != nil {
+		t.Fatalf("failed to seed quota flag: %v", err)
+	}
+
+	url, _, _, _, err := r.Resolve(ctx, "abc", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if url != "https://fallback.example.com" {
+		t.Fatalf("expected fallback url for over-quota tenant, got %s", url)
+	}
+}
+
+func TestResolve_OverQuotaTenantWithNoFallbackReturnsNotFound(t *testing.T) {
+	fs := newFakeStore()
+	fs.routesByCode["abc"] = &store.RouteData{
+		LinkID: "link-1", TenantID: "tenant-over-quota", ShortCode: "abc",
+		Destinations: []store.Destination{
+			{ID: "d1", URL: "https://example.com/a", Weight: 1},
+		},
+	}
+	r := newTestResolver(t, fs, &fakeHealthPublisher{}, 0.7)
+	ctx := context.Background()
+	if err := r.cache.Set(ctx, quotaBlockedKey("tenant-over-quota"), "1", time.Hour); err != nil {
+		t.Fatalf("failed to seed quota flag: %v", err)
+	}
+
+	_, _, _, _, err := r.Resolve(ctx, "abc", "", "")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestResolve_OverQuotaTenantNeverTracksAClick(t *testing.T) {
+	fs := newFakeStore()
+	maxClicks := 100
+	fs.maxClicksByDest["d1"] = &maxClicks
+	fs.routesByCode["abc"] = &store.RouteData{
+		LinkID: "link-1", TenantID: "tenant-over-quota", ShortCode: "abc",
+		Destinations: []store.Destination{
+			{ID: "d1", URL: "https://example.com/a", Weight: 1, MaxClicks: &maxClicks},
+		},
+	}
+	r := newTestResolver(t, fs, &fakeHealthPublisher{}, 0.7)
+	ctx := context.Background()
+	if err := r.cache.Set(ctx, quotaBlockedKey("tenant-over-quota"), "1", time.Hour); err != nil {
+		t.Fatalf("failed to seed quota flag: %v", err)
+	}
+
+	if _, _, _, _, err := r.Resolve(ctx, "abc", "", ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+
+	// give the (nonexistent) async trackClick goroutine a chance to run,
+	// to make sure it really was never launched.
+	time.Sleep(20 * time.Millisecond)
+	if fs.clicks["d1"].CurrentClicks != 0 {
+		t.Fatalf("expected no click tracked for an over-quota tenant, got %+v", fs.clicks["d1"])
+	}
+}
+
+func TestResolve_UnderQuotaTenantUnaffected(t *testing.T) {
+	fs := newFakeStore()
+	fs.routesByCode["abc"] = &store.RouteData{
+		LinkID: "link-1", TenantID: "tenant-fine", ShortCode: "abc",
+		Destinations: []store.Destination{
+			{ID: "d1", URL: "https://example.com/a", Weight: 1},
+		},
+	}
+	r := newTestResolver(t, fs, &fakeHealthPublisher{}, 0.7)
+	// No quota flag seeded for "tenant-fine".
+
+	url, _, _, _, err := r.Resolve(context.Background(), "abc", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if url != "https://example.com/a" {
+		t.Fatalf("expected normal resolution, got %s", url)
+	}
+}

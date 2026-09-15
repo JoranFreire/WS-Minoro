@@ -74,13 +74,22 @@ func (w *PGWriter) IncrClickByDevice(ctx context.Context, linkID, deviceType str
 	return err
 }
 
-// IncrQuotaUsage upserts the monthly quota counter for a tenant.
-func (w *PGWriter) IncrQuotaUsage(ctx context.Context, tenantID string, month time.Time) error {
-	_, err := w.pool.Exec(ctx, `
-		INSERT INTO quota_usage (tenant_id, month, clicks_used)
-		VALUES ($1, date_trunc('month', $2::date), 1)
-		ON CONFLICT (tenant_id, month)
-		DO UPDATE SET clicks_used = quota_usage.clicks_used + 1
+// IncrQuotaUsage upserts the monthly quota counter for a tenant and returns
+// the updated usage alongside the tenant's plan limit, so the caller can
+// tell in the same round trip whether this click just crossed the quota.
+func (w *PGWriter) IncrQuotaUsage(ctx context.Context, tenantID string, month time.Time) (used, limit int64, err error) {
+	row := w.pool.QueryRow(ctx, `
+		WITH upserted AS (
+			INSERT INTO quota_usage (tenant_id, month, clicks_used)
+			VALUES ($1, date_trunc('month', $2::date), 1)
+			ON CONFLICT (tenant_id, month)
+			DO UPDATE SET clicks_used = quota_usage.clicks_used + 1
+			RETURNING tenant_id, clicks_used
+		)
+		SELECT upserted.clicks_used, tenants.quota_clicks_month
+		FROM upserted
+		JOIN tenants ON tenants.id = upserted.tenant_id
 	`, tenantID, month.Format("2006-01-02"))
-	return err
+	err = row.Scan(&used, &limit)
+	return used, limit, err
 }

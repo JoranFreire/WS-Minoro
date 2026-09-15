@@ -37,6 +37,8 @@ type fakePGWriter struct {
 	countryErr     error
 	deviceErr      error
 	quotaErr       error
+	quotaUsed      int64
+	quotaLimit     int64
 }
 
 func (f *fakePGWriter) IncrClickAggregate(ctx context.Context, linkID, tenantID string, ts time.Time) error {
@@ -60,11 +62,27 @@ func (f *fakePGWriter) IncrClickByDevice(ctx context.Context, linkID, deviceType
 	return f.deviceErr
 }
 
-func (f *fakePGWriter) IncrQuotaUsage(ctx context.Context, tenantID string, month time.Time) error {
+func (f *fakePGWriter) IncrQuotaUsage(ctx context.Context, tenantID string, month time.Time) (int64, int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.quotaCalls++
-	return f.quotaErr
+	return f.quotaUsed, f.quotaLimit, f.quotaErr
+}
+
+type fakeQuotaBlocker struct {
+	mu      sync.Mutex
+	blocked []string
+	err     error
+}
+
+func (f *fakeQuotaBlocker) MarkOverQuota(ctx context.Context, tenantID string, now time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return f.err
+	}
+	f.blocked = append(f.blocked, tenantID)
+	return nil
 }
 
 type fakeRedisAggregator struct {
@@ -99,7 +117,7 @@ func TestClickProcessor_Process_AllSucceed(t *testing.T) {
 	pg := &fakePGWriter{}
 	redis := &fakeRedisAggregator{}
 	tracker := health.NewTracker()
-	p := NewClickProcessor(cass, pg, redis, tracker)
+	p := NewClickProcessor(cass, pg, redis, &fakeQuotaBlocker{}, tracker)
 
 	if err := p.Process(context.Background(), newTestEvent()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -124,7 +142,7 @@ func TestClickProcessor_Process_PartialFailureReturnsErrorButStaysHealthy(t *tes
 	pg := &fakePGWriter{}
 	redis := &fakeRedisAggregator{}
 	tracker := health.NewTracker()
-	p := NewClickProcessor(cass, pg, redis, tracker)
+	p := NewClickProcessor(cass, pg, redis, &fakeQuotaBlocker{}, tracker)
 
 	err := p.Process(context.Background(), newTestEvent())
 	if err == nil {
@@ -148,7 +166,7 @@ func TestClickProcessor_Process_TotalFailureRecordsTrackerFailure(t *testing.T) 
 	pg := &fakePGWriter{aggregateErr: failErr, countryErr: failErr, deviceErr: failErr, quotaErr: failErr}
 	redis := &fakeRedisAggregator{err: failErr}
 	tracker := health.NewTracker()
-	p := NewClickProcessor(cass, pg, redis, tracker)
+	p := NewClickProcessor(cass, pg, redis, &fakeQuotaBlocker{}, tracker)
 
 	err := p.Process(context.Background(), newTestEvent())
 	if err == nil {
@@ -175,7 +193,7 @@ func TestClickProcessor_Process_SuccessAfterFailuresRestoresHealth(t *testing.T)
 	pg := &fakePGWriter{aggregateErr: failErr, countryErr: failErr, deviceErr: failErr, quotaErr: failErr}
 	redis := &fakeRedisAggregator{err: failErr}
 	tracker := health.NewTracker()
-	p := NewClickProcessor(cass, pg, redis, tracker)
+	p := NewClickProcessor(cass, pg, redis, &fakeQuotaBlocker{}, tracker)
 
 	for range 9 {
 		_ = p.Process(context.Background(), newTestEvent())
@@ -198,7 +216,7 @@ func TestClickProcessor_Process_HashesIPBeforeWritingToCassandra(t *testing.T) {
 	pg := &fakePGWriter{}
 	redis := &fakeRedisAggregator{}
 	tracker := health.NewTracker()
-	p := NewClickProcessor(cass, pg, redis, tracker)
+	p := NewClickProcessor(cass, pg, redis, &fakeQuotaBlocker{}, tracker)
 
 	event := newTestEvent()
 	if err := p.Process(context.Background(), event); err != nil {
@@ -213,5 +231,57 @@ func TestClickProcessor_Process_HashesIPBeforeWritingToCassandra(t *testing.T) {
 	}
 	if cass.writes[0].IPHash == "" {
 		t.Fatal("expected a non-empty IP hash")
+	}
+}
+
+func TestClickProcessor_Process_MarksTenantOverQuotaWhenLimitReached(t *testing.T) {
+	cass := &fakeCassandraWriter{}
+	pg := &fakePGWriter{quotaUsed: 50000, quotaLimit: 50000}
+	redis := &fakeRedisAggregator{}
+	quotaBlocker := &fakeQuotaBlocker{}
+	tracker := health.NewTracker()
+	p := NewClickProcessor(cass, pg, redis, quotaBlocker, tracker)
+
+	event := newTestEvent()
+	if err := p.Process(context.Background(), event); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(quotaBlocker.blocked) != 1 || quotaBlocker.blocked[0] != event.TenantID {
+		t.Fatalf("expected tenant %s to be marked over quota, got %+v", event.TenantID, quotaBlocker.blocked)
+	}
+}
+
+func TestClickProcessor_Process_DoesNotMarkOverQuotaBelowLimit(t *testing.T) {
+	cass := &fakeCassandraWriter{}
+	pg := &fakePGWriter{quotaUsed: 49999, quotaLimit: 50000}
+	redis := &fakeRedisAggregator{}
+	quotaBlocker := &fakeQuotaBlocker{}
+	tracker := health.NewTracker()
+	p := NewClickProcessor(cass, pg, redis, quotaBlocker, tracker)
+
+	if err := p.Process(context.Background(), newTestEvent()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(quotaBlocker.blocked) != 0 {
+		t.Fatalf("expected no tenant marked over quota, got %+v", quotaBlocker.blocked)
+	}
+}
+
+func TestClickProcessor_Process_ZeroLimitNeverBlocks(t *testing.T) {
+	cass := &fakeCassandraWriter{}
+	pg := &fakePGWriter{quotaUsed: 1_000_000, quotaLimit: 0}
+	redis := &fakeRedisAggregator{}
+	quotaBlocker := &fakeQuotaBlocker{}
+	tracker := health.NewTracker()
+	p := NewClickProcessor(cass, pg, redis, quotaBlocker, tracker)
+
+	if err := p.Process(context.Background(), newTestEvent()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(quotaBlocker.blocked) != 0 {
+		t.Fatal("a zero/unset quota limit must never block a tenant")
 	}
 }

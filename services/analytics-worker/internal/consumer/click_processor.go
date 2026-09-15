@@ -28,22 +28,30 @@ type PGWriter interface {
 	IncrClickAggregate(ctx context.Context, linkID, tenantID string, ts time.Time) error
 	IncrClickByCountry(ctx context.Context, linkID, countryCode string, ts time.Time) error
 	IncrClickByDevice(ctx context.Context, linkID, deviceType string, ts time.Time) error
-	IncrQuotaUsage(ctx context.Context, tenantID string, month time.Time) error
+	IncrQuotaUsage(ctx context.Context, tenantID string, month time.Time) (used, limit int64, err error)
 }
 
 type RedisAggregator interface {
 	IncrClick(ctx context.Context, linkID, tenantID string, ts time.Time) error
 }
 
+// QuotaBlocker flags a tenant in Redis once it crosses its monthly click
+// quota, so link-router can reject further redirects without hitting
+// Postgres on the hot path.
+type QuotaBlocker interface {
+	MarkOverQuota(ctx context.Context, tenantID string, now time.Time) error
+}
+
 type ClickProcessor struct {
 	cassandra CassandraWriter
 	pg        PGWriter
 	redis     RedisAggregator
+	quota     QuotaBlocker
 	tracker   *health.Tracker
 }
 
-func NewClickProcessor(c CassandraWriter, pg PGWriter, r RedisAggregator, tracker *health.Tracker) *ClickProcessor {
-	return &ClickProcessor{cassandra: c, pg: pg, redis: r, tracker: tracker}
+func NewClickProcessor(c CassandraWriter, pg PGWriter, r RedisAggregator, q QuotaBlocker, tracker *health.Tracker) *ClickProcessor {
+	return &ClickProcessor{cassandra: c, pg: pg, redis: r, quota: q, tracker: tracker}
 }
 
 // Process persists a click event to every sink and reports every failure —
@@ -89,8 +97,12 @@ func (p *ClickProcessor) Process(ctx context.Context, event ClickEvent) error {
 		errs = append(errs, fmt.Errorf("pg device: %w", err))
 	}
 
-	if err := p.pg.IncrQuotaUsage(ctx, event.TenantID, event.Timestamp); err != nil {
+	if used, limit, err := p.pg.IncrQuotaUsage(ctx, event.TenantID, event.Timestamp); err != nil {
 		errs = append(errs, fmt.Errorf("quota update: %w", err))
+	} else if limit > 0 && used >= limit {
+		if err := p.quota.MarkOverQuota(ctx, event.TenantID, event.Timestamp); err != nil {
+			errs = append(errs, fmt.Errorf("quota block: %w", err))
+		}
 	}
 
 	if len(errs) == writeCount {

@@ -78,6 +78,18 @@ func (r *LinkResolver) Resolve(
 		return "", "", "", "", ErrNotFound
 	}
 
+	// Monthly click quota — analytics-worker flags a tenant in Redis once
+	// it crosses its plan's quota_clicks_month. Checked here as a cheap
+	// Redis GET (never a live Postgres query) to keep the hot path fast,
+	// and fails open if Redis is unreachable, same as the route cache and
+	// rate limiter — a Redis outage must not block legitimate traffic.
+	if r.isOverQuota(ctx, route.TenantID) {
+		if route.FallbackURL != "" {
+			return route.FallbackURL, route.LinkID, route.TenantID, "", nil
+		}
+		return "", "", "", "", ErrNotFound
+	}
+
 	// Phase 2: filter out cooldown and high-risk destinations.
 	active := r.filterDestinations(route.Destinations)
 
@@ -155,6 +167,25 @@ func (r *LinkResolver) trackClick(route *store.RouteData, dest store.Destination
 
 		log.Printf("resolver: destination %s auto-disabled (max_clicks=%d)", dest.ID, *result.MaxClicks)
 	}
+}
+
+// isOverQuota reports whether the tenant has been flagged in Redis as
+// having exceeded its monthly click quota.
+func (r *LinkResolver) isOverQuota(ctx context.Context, tenantID string) bool {
+	var blocked bool
+	_ = r.redisBreaker.Call(func() error {
+		val, err := r.cache.Get(ctx, quotaBlockedKey(tenantID))
+		if err != nil {
+			return err
+		}
+		blocked = val == "1"
+		return nil
+	})
+	return blocked
+}
+
+func quotaBlockedKey(tenantID string) string {
+	return "quota:blocked:" + tenantID
 }
 
 // getRoute fetches a route from cache (Redis) with a PG fallback.
