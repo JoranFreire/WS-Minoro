@@ -1,201 +1,51 @@
 "use client";
 
-import { useState } from "react";
 import { Link } from "@/lib/api";
-import { useCreateLink, useUpdateLink, useAddDestination } from "@/hooks/useLinks";
-import { Plus, Trash2, Copy, ChevronDown } from "lucide-react";
-
-interface DestinationDraft {
-  url: string;
-  weight: number;
-  max_clicks: string;
-}
+import { useLinkForm } from "./useLinkForm";
+import { ShortUrlBadge } from "./ShortUrlBadge";
+import { RoutingStrategySelect } from "./RoutingStrategySelect";
+import { DestinationDraftEditor } from "./DestinationDraftEditor";
+import { ActiveToggle } from "./ActiveToggle";
+import { INPUT } from "./formStyles";
 
 interface LinkFormProps {
   link?: Link;
   onClose: () => void;
 }
 
-const INPUT = "w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm text-gray-900 bg-white placeholder-gray-400";
-const INPUT_SM = "w-full px-2 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500 text-xs text-gray-900 bg-white placeholder-gray-400";
-
 export function LinkForm({ link, onClose }: LinkFormProps) {
-  const [title, setTitle] = useState(link?.title || "");
-  const [fallbackUrl, setFallbackUrl] = useState(link?.fallback_url || "");
-  const [strategy, setStrategy] = useState<"single" | "round_robin" | "weighted">(
-    link?.routing_strategy || "round_robin"
-  );
-  const [isActive, setIsActive] = useState(link?.is_active ?? true);
-  const [destinations, setDestinations] = useState<DestinationDraft[]>([
-    { url: "", weight: 1, max_clicks: "" },
-  ]);
-
-  const createLink = useCreateLink();
-  const updateLink = useUpdateLink();
-  const addDestination = useAddDestination();
-  const isEditing = !!link;
+  const form = useLinkForm({ link, onClose });
 
   const routerBase =
     process.env.NEXT_PUBLIC_ROUTER_URL?.replace(/\/$/, "") || "http://localhost:8080";
-  const shortUrl = isEditing ? `${routerBase}/${link.short_code}` : null;
-
-  const addRow = () =>
-    setDestinations((prev) => [...prev, { url: "", weight: 1, max_clicks: "" }]);
-
-  const removeRow = (i: number) =>
-    setDestinations((prev) => prev.filter((_, idx) => idx !== i));
-
-  const updateRow = (i: number, field: keyof DestinationDraft, value: string | number) =>
-    setDestinations((prev) =>
-      prev.map((d, idx) => (idx === i ? { ...d, [field]: value } : d))
-    );
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const data = {
-      title,
-      fallback_url: fallbackUrl,
-      routing_strategy: strategy as Link["routing_strategy"],
-      is_active: isActive,
-    };
-
-    if (isEditing) {
-      await updateLink.mutateAsync({ id: link.id, data });
-    } else {
-      const created = await createLink.mutateAsync(data);
-      const validDestinations = destinations.filter((d) => d.url.trim());
-      for (const dest of validDestinations) {
-        await addDestination.mutateAsync({
-          linkId: created.id,
-          data: {
-            url: dest.url,
-            weight: dest.weight,
-            max_clicks: dest.max_clicks ? parseInt(dest.max_clicks) : undefined,
-          },
-        });
-      }
-    }
-    onClose();
-  };
-
-  const isPending =
-    createLink.isPending || updateLink.isPending || addDestination.isPending;
-
-  const error =
-    (createLink.error || updateLink.error || addDestination.error) as { response?: { data?: { message?: string; error?: string } } } | null;
+  const shortUrl = form.isEditing && link ? `${routerBase}/${link.short_code}` : null;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-
-      {isEditing && shortUrl && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-          <span className="text-xs text-green-700 font-mono flex-1 truncate">{shortUrl}</span>
-          <button
-            type="button"
-            onClick={() => navigator.clipboard.writeText(shortUrl)}
-            className="text-green-600 hover:text-green-800 flex-shrink-0"
-            title="Copiar link"
-          >
-            <Copy className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
+    <form onSubmit={form.handleSubmit} className="space-y-4">
+      {shortUrl && <ShortUrlBadge shortUrl={shortUrl} />}
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Título</label>
         <input
           type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          value={form.title}
+          onChange={(e) => form.setTitle(e.target.value)}
           className={INPUT}
           placeholder="Grupo WhatsApp Vendas"
           required
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Estratégia de roteamento
-        </label>
-        <div className="relative">
-          <select
-            value={strategy}
-            onChange={(e) => setStrategy(e.target.value as "single" | "round_robin" | "weighted")}
-            className={`${INPUT} appearance-none pr-10 cursor-pointer`}
-          >
-            <option value="round_robin">Round Robin — distribuir igualmente</option>
-            <option value="weighted">Weighted — distribuir por peso</option>
-            <option value="single">Single — sempre o primeiro ativo</option>
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-        </div>
-      </div>
+      <RoutingStrategySelect value={form.strategy} onChange={form.setStrategy} />
 
-      {!isEditing && (
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Links de destino
-            </label>
-            <button
-              type="button"
-              onClick={addRow}
-              className="flex items-center gap-1 text-xs text-green-700 hover:text-green-800 font-medium"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Adicionar
-            </button>
-          </div>
-          <div className="space-y-2">
-            {destinations.map((dest, i) => (
-              <div key={i} className="flex gap-2 items-start">
-                <div className="flex-1 space-y-1">
-                  <input
-                    type="url"
-                    value={dest.url}
-                    onChange={(e) => updateRow(i, "url", e.target.value)}
-                    placeholder="https://chat.whatsapp.com/..."
-                    className={INPUT}
-                  />
-                  {strategy !== "single" && (
-                    <div className="flex gap-2">
-                      {strategy === "weighted" && (
-                        <div className="flex-1">
-                          <input
-                            type="number"
-                            value={dest.weight}
-                            onChange={(e) => updateRow(i, "weight", parseInt(e.target.value))}
-                            min={1}
-                            placeholder="Peso"
-                            className={INPUT_SM}
-                          />
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <input
-                          type="number"
-                          value={dest.max_clicks}
-                          onChange={(e) => updateRow(i, "max_clicks", e.target.value)}
-                          placeholder="Máx. cliques (opcional)"
-                          className={INPUT_SM}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {destinations.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeRow(i)}
-                    className="mt-2 p-1 text-gray-400 hover:text-red-500"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+      {!form.isEditing && (
+        <DestinationDraftEditor
+          strategy={form.strategy}
+          destinations={form.destinations}
+          onAdd={form.addRow}
+          onRemove={form.removeRow}
+          onUpdate={form.updateRow}
+        />
       )}
 
       <div>
@@ -207,35 +57,22 @@ export function LinkForm({ link, onClose }: LinkFormProps) {
         </label>
         <input
           type="url"
-          value={fallbackUrl}
-          onChange={(e) => setFallbackUrl(e.target.value)}
+          value={form.fallbackUrl}
+          onChange={(e) => form.setFallbackUrl(e.target.value)}
           className={INPUT}
           placeholder="https://..."
         />
       </div>
 
-      {isEditing && (
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700">Ativo</span>
-          <button
-            type="button"
-            onClick={() => setIsActive(!isActive)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              isActive ? "bg-green-600" : "bg-gray-200"
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                isActive ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
-        </div>
+      {form.isEditing && (
+        <ActiveToggle active={form.isActive} onToggle={() => form.setIsActive(!form.isActive)} />
       )}
 
-      {error && (
+      {form.error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-          {error?.response?.data?.message ?? error?.response?.data?.error ?? "Erro ao salvar. Verifique os dados e tente novamente."}
+          {form.error?.response?.data?.message ??
+            form.error?.response?.data?.error ??
+            "Erro ao salvar. Verifique os dados e tente novamente."}
         </div>
       )}
 
@@ -249,10 +86,10 @@ export function LinkForm({ link, onClose }: LinkFormProps) {
         </button>
         <button
           type="submit"
-          disabled={isPending}
+          disabled={form.isPending}
           className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium transition-colors"
         >
-          {isPending ? "Salvando..." : isEditing ? "Atualizar" : "Criar"}
+          {form.isPending ? "Salvando..." : form.isEditing ? "Atualizar" : "Criar"}
         </button>
       </div>
     </form>
