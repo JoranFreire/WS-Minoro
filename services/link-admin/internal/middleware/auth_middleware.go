@@ -15,7 +15,7 @@ const UserContextKey = "user_claims"
 // on. Defined here so tests can inject a fake instead of requiring a live
 // Postgres connection and real JWT signing.
 type AuthValidator interface {
-	ValidateToken(tokenStr string) (*service.Claims, error)
+	ValidateAccessToken(tokenStr string) (*service.Claims, error)
 	ValidateAPIKey(ctx context.Context, keyStr string) (*repository.User, error)
 }
 
@@ -58,7 +58,7 @@ func (m *AuthMiddleware) Authenticate(c *fiber.Ctx) error {
 }
 
 func (m *AuthMiddleware) authenticateJWT(c *fiber.Ctx, token string) error {
-	claims, err := m.authSvc.ValidateToken(token)
+	claims, err := m.authSvc.ValidateAccessToken(token)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid token"})
 	}

@@ -76,11 +76,14 @@ func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing refresh token"})
 	}
 
-	if _, err := h.authSvc.ValidateToken(refreshToken); err != nil {
+	accessToken, newRefreshToken, err := h.authSvc.RefreshSession(c.Context(), refreshToken)
+	if err != nil {
+		h.clearSessionCookies(c)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid refresh token"})
 	}
 
-	return c.JSON(fiber.Map{"message": "use login endpoint to get new tokens"})
+	h.setSessionCookies(c, accessToken, newRefreshToken)
+	return c.JSON(fiber.Map{"message": "ok"})
 }
 
 // Logout clears every session cookie. Since access_token and refresh_token

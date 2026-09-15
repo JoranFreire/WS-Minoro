@@ -31,6 +31,15 @@ func (f *fakeUserGetter) GetUserByEmail(ctx context.Context, email string) (*rep
 	return u, nil
 }
 
+func (f *fakeUserGetter) GetUserByID(ctx context.Context, id uuid.UUID) (*repository.User, error) {
+	for _, u := range f.usersByEmail {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return nil, errors.New("not found")
+}
+
 type fakeAPIKeyGetter struct {
 	keysByHash map[string]*repository.APIKey
 }
@@ -304,5 +313,98 @@ func TestRegister_DuplicateEmailPropagatesErrEmailTaken(t *testing.T) {
 	_, _, err := svc.Register(context.Background(), "Acme Inc", "owner@acme.com", "supersecret")
 	if !errors.Is(err, ErrEmailTaken) {
 		t.Fatalf("expected ErrEmailTaken, got %v", err)
+	}
+}
+
+func TestRefreshSession_ValidRefreshTokenIssuesNewWorkingPair(t *testing.T) {
+	tenantID := uuid.New()
+	userID := uuid.New()
+	users := &fakeUserGetter{usersByEmail: map[string]*repository.User{
+		"user@example.com": {
+			ID: userID, TenantID: tenantID, Email: "user@example.com",
+			PasswordHash: hashPassword(t, "pw"), Role: "owner", IsActive: true,
+		},
+	}}
+	svc := NewAuthService(users, &fakeAPIKeyGetter{}, &fakeRegistrar{}, "test-secret-at-least-32-characters")
+
+	_, refresh, err := svc.Login(context.Background(), "user@example.com", "pw")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	newAccess, newRefresh, err := svc.RefreshSession(context.Background(), refresh)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if newAccess == "" || newRefresh == "" {
+		t.Fatal("expected non-empty rotated tokens")
+	}
+
+	claims, err := svc.ValidateAccessToken(newAccess)
+	if err != nil {
+		t.Fatalf("new access token should be valid: %v", err)
+	}
+	if claims.TenantID != tenantID.String() || claims.Role != "owner" {
+		t.Fatalf("unexpected claims after refresh: %+v", claims)
+	}
+}
+
+func TestRefreshSession_RejectsAnAccessTokenUsedAsRefresh(t *testing.T) {
+	users := &fakeUserGetter{usersByEmail: map[string]*repository.User{
+		"user@example.com": {
+			ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com",
+			PasswordHash: hashPassword(t, "pw"), IsActive: true,
+		},
+	}}
+	svc := NewAuthService(users, &fakeAPIKeyGetter{}, &fakeRegistrar{}, "test-secret-at-least-32-characters")
+
+	access, _, err := svc.Login(context.Background(), "user@example.com", "pw")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, _, err := svc.RefreshSession(context.Background(), access); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("expected ErrUnauthorized when an access token is presented as a refresh token, got %v", err)
+	}
+}
+
+func TestRefreshSession_UnknownUserRejected(t *testing.T) {
+	users := &fakeUserGetter{usersByEmail: map[string]*repository.User{
+		"user@example.com": {
+			ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com",
+			PasswordHash: hashPassword(t, "pw"), IsActive: true,
+		},
+	}}
+	svc := NewAuthService(users, &fakeAPIKeyGetter{}, &fakeRegistrar{}, "test-secret-at-least-32-characters")
+
+	_, refresh, err := svc.Login(context.Background(), "user@example.com", "pw")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// The user was deactivated/removed after the refresh token was issued.
+	users.usersByEmail = map[string]*repository.User{}
+
+	if _, _, err := svc.RefreshSession(context.Background(), refresh); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("expected ErrUnauthorized for a user no longer found, got %v", err)
+	}
+}
+
+func TestValidateAccessToken_RejectsARefreshToken(t *testing.T) {
+	users := &fakeUserGetter{usersByEmail: map[string]*repository.User{
+		"user@example.com": {
+			ID: uuid.New(), TenantID: uuid.New(), Email: "user@example.com",
+			PasswordHash: hashPassword(t, "pw"), IsActive: true,
+		},
+	}}
+	svc := NewAuthService(users, &fakeAPIKeyGetter{}, &fakeRegistrar{}, "test-secret-at-least-32-characters")
+
+	_, refresh, err := svc.Login(context.Background(), "user@example.com", "pw")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := svc.ValidateAccessToken(refresh); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("a refresh token must never authenticate an API call, got %v", err)
 	}
 }

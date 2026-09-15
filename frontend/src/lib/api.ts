@@ -9,10 +9,47 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// Coalesces concurrent 401s into a single /auth/refresh call instead of a
+// stampede — several requests can fail at once right as the access token
+// expires.
+let refreshPromise: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = api
+      .post("/auth/refresh")
+      .then(() => true)
+      .catch(() => false)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+interface RetriableConfig {
+  url?: string;
+  _retry?: boolean;
+}
+
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401 && typeof window !== "undefined") {
+  async (err) => {
+    const status = err.response?.status;
+    const originalRequest = err.config as RetriableConfig | undefined;
+    // /auth/* 401s (e.g. wrong password on login) are handled by whoever
+    // called them, not globally — otherwise a failed login attempt reloads
+    // the page before the caller's own error message is ever shown.
+    const isAuthEndpoint = originalRequest?.url?.startsWith("/auth/");
+
+    if (status === 401 && !isAuthEndpoint && originalRequest && !originalRequest._retry) {
+      originalRequest._retry = true;
+      if (await refreshSession()) {
+        return api(originalRequest);
+      }
+    }
+
+    if (status === 401 && !isAuthEndpoint && typeof window !== "undefined") {
       clearAuthState();
       // A full reload (not useRouter/redirect) is intentional here: this
       // interceptor runs outside React's render tree, and a hard navigation

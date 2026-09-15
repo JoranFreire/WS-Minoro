@@ -20,7 +20,7 @@ type fakeAuthValidator struct {
 	apiKeyUser  *repository.User
 }
 
-func (f *fakeAuthValidator) ValidateToken(tokenStr string) (*service.Claims, error) {
+func (f *fakeAuthValidator) ValidateAccessToken(tokenStr string) (*service.Claims, error) {
 	if tokenStr == f.validToken && f.claims != nil {
 		return f.claims, nil
 	}
