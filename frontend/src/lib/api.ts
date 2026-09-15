@@ -1,23 +1,24 @@
 import axios from "axios";
+import { clearAuthState } from "./auth";
 
+// Session tokens live in httpOnly cookies set by link-admin, so the browser
+// attaches them automatically — the client never sees or handles the token.
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081",
   headers: { "Content-Type": "application/json" },
-});
-
-api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("access_token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  withCredentials: true,
 });
 
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem("access_token");
+      clearAuthState();
+      // A full reload (not useRouter/redirect) is intentional here: this
+      // interceptor runs outside React's render tree, and a hard navigation
+      // also clears the react-query cache and any other in-memory state
+      // left over from the expired session.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.href = "/login";
     }
     return Promise.reject(err);
@@ -26,7 +27,8 @@ api.interceptors.response.use(
 
 // --- Auth ---
 export const login = (email: string, password: string) =>
-  api.post<{ access_token: string; refresh_token: string }>("/auth/login", { email, password });
+  api.post<{ message: string }>("/auth/login", { email, password });
+export const logout = () => api.post<{ message: string }>("/auth/logout");
 
 // --- Links ---
 export interface Link {

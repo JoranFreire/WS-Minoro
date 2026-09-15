@@ -1,16 +1,28 @@
 package handler
 
 import (
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/ws-minoro/link-admin/internal/service"
 )
 
+const (
+	accessTokenCookie  = "access_token"
+	refreshTokenCookie = "refresh_token"
+	// authStateCookie is a non-sensitive, JS-readable marker (no token
+	// material) the frontend uses to know a session is active, since the
+	// real tokens live in httpOnly cookies it cannot read.
+	authStateCookie = "auth_state"
+)
+
 type AuthHandler struct {
-	authSvc *service.AuthService
+	authSvc      *service.AuthService
+	cookieSecure bool
 }
 
-func NewAuthHandler(authSvc *service.AuthService) *AuthHandler {
-	return &AuthHandler{authSvc: authSvc}
+func NewAuthHandler(authSvc *service.AuthService, cookieSecure bool) *AuthHandler {
+	return &AuthHandler{authSvc: authSvc, cookieSecure: cookieSecure}
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
@@ -27,24 +39,71 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid credentials"})
 	}
 
-	return c.JSON(fiber.Map{
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
-	})
+	h.setSessionCookies(c, accessToken, refreshToken)
+	return c.JSON(fiber.Map{"message": "ok"})
 }
 
 func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
-	var req struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+	refreshToken := c.Cookies(refreshTokenCookie)
+	if refreshToken == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "missing refresh token"})
 	}
 
-	_, err := h.authSvc.ValidateToken(req.RefreshToken)
-	if err != nil {
+	if _, err := h.authSvc.ValidateToken(refreshToken); err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid refresh token"})
 	}
 
 	return c.JSON(fiber.Map{"message": "use login endpoint to get new tokens"})
+}
+
+// Logout clears every session cookie. Since access_token and refresh_token
+// are httpOnly, only the server can clear them (the browser JS cannot).
+func (h *AuthHandler) Logout(c *fiber.Ctx) error {
+	h.clearSessionCookies(c)
+	return c.JSON(fiber.Map{"message": "ok"})
+}
+
+func (h *AuthHandler) setSessionCookies(c *fiber.Ctx, accessToken, refreshToken string) {
+	c.Cookie(&fiber.Cookie{
+		Name:     accessTokenCookie,
+		Value:    accessToken,
+		Path:     "/",
+		MaxAge:   int(service.AccessTokenTTL.Seconds()),
+		HTTPOnly: true,
+		Secure:   h.cookieSecure,
+		SameSite: fiber.CookieSameSiteLaxMode,
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:     refreshTokenCookie,
+		Value:    refreshToken,
+		Path:     "/",
+		MaxAge:   int(service.RefreshTokenTTL.Seconds()),
+		HTTPOnly: true,
+		Secure:   h.cookieSecure,
+		SameSite: fiber.CookieSameSiteLaxMode,
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:     authStateCookie,
+		Value:    "1",
+		Path:     "/",
+		MaxAge:   int(service.RefreshTokenTTL.Seconds()),
+		HTTPOnly: false,
+		Secure:   h.cookieSecure,
+		SameSite: fiber.CookieSameSiteLaxMode,
+	})
+}
+
+func (h *AuthHandler) clearSessionCookies(c *fiber.Ctx) {
+	expired := time.Now().Add(-time.Hour)
+	for _, name := range []string{accessTokenCookie, refreshTokenCookie, authStateCookie} {
+		c.Cookie(&fiber.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     "/",
+			Expires:  expired,
+			HTTPOnly: name != authStateCookie,
+			Secure:   h.cookieSecure,
+			SameSite: fiber.CookieSameSiteLaxMode,
+		})
+	}
 }

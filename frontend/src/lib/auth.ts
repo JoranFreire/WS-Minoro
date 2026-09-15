@@ -1,19 +1,22 @@
 "use client";
 
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("access_token");
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem("access_token", token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
-}
+// The real session tokens live in httpOnly cookies set by link-admin and are
+// never readable from JavaScript. `auth_state` is a separate, non-sensitive
+// marker cookie (no token material) the backend sets alongside them purely
+// so the frontend can tell whether a session is active.
+const AUTH_STATE_COOKIE = "auth_state";
 
 export function isAuthenticated(): boolean {
-  return !!getToken();
+  if (typeof document === "undefined") return false;
+  return document.cookie
+    .split("; ")
+    .some((c) => c.startsWith(`${AUTH_STATE_COOKIE}=`));
+}
+
+// Clears the client-readable marker immediately for UI purposes. The
+// httpOnly cookies themselves can only be cleared by the server — call the
+// /auth/logout endpoint to actually end the session.
+export function clearAuthState(): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${AUTH_STATE_COOKIE}=; path=/; max-age=0`;
 }

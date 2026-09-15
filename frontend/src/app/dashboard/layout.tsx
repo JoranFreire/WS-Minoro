@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { clearToken } from "@/lib/auth";
+import { logout } from "@/lib/api";
+import { clearAuthState } from "@/lib/auth";
 import { LinkIcon, BarChart3, Settings, LogOut } from "lucide-react";
 
 const navItems = [
@@ -15,9 +16,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
 
-  const handleLogout = () => {
-    clearToken();
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } finally {
+      clearAuthState();
+      router.push("/login");
+    }
   };
 
   return (

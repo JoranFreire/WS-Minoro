@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/lib/api";
-import { setToken } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,8 +16,7 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await login(email, password);
-      setToken(data.access_token);
+      await login(email, password);
       router.push("/dashboard/links");
     } catch {
       setError("Invalid email or password");

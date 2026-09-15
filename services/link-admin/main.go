@@ -18,17 +18,23 @@ import (
 func main() {
 	cfg := config.Load()
 
-	repo := repository.NewRepository(cfg.DatabaseURL)
+	pool := repository.Connect(cfg.DatabaseURL)
 
-	linkSvc := service.NewLinkService(repo)
-	tenantSvc := service.NewTenantService(repo)
-	authSvc := service.NewAuthService(repo, cfg.JWTSecret)
+	userRepo := repository.NewUserRepository(pool)
+	tenantRepo := repository.NewTenantRepository(pool)
+	linkRepo := repository.NewLinkRepository(pool)
+	apiKeyRepo := repository.NewAPIKeyRepository(pool)
+	analyticsRepo := repository.NewAnalyticsRepository(pool)
+
+	linkSvc := service.NewLinkService(linkRepo)
+	tenantSvc := service.NewTenantService(tenantRepo, apiKeyRepo)
+	authSvc := service.NewAuthService(userRepo, apiKeyRepo, cfg.JWTSecret)
 
 	linkHandler := handler.NewLinkHandler(linkSvc)
 	tenantHandler := handler.NewTenantHandler(tenantSvc)
-	authHandler := handler.NewAuthHandler(authSvc)
+	authHandler := handler.NewAuthHandler(authSvc, cfg.CookieSecure)
 	apikeyHandler := handler.NewAPIKeyHandler(tenantSvc)
-	analyticsHandler := handler.NewAnalyticsHandler(repo)
+	analyticsHandler := handler.NewAnalyticsHandler(linkRepo, analyticsRepo)
 
 	authMw := middleware.NewAuthMiddleware(authSvc)
 
@@ -40,9 +46,10 @@ func main() {
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
+		AllowOrigins:     cfg.FrontendOrigin,
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
+		AllowCredentials: true,
 	}))
 
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -52,6 +59,7 @@ func main() {
 	auth := app.Group("/auth")
 	auth.Post("/login", authHandler.Login)
 	auth.Post("/refresh", authHandler.Refresh)
+	auth.Post("/logout", authHandler.Logout)
 
 	api := app.Group("/api/v1", authMw.Authenticate)
 
